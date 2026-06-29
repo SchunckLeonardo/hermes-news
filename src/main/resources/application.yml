@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: hermes-news
+  config:
+    import: optional:file:.env[.properties]
+  profiles:
+    default: local
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  scheduler:
+    daily-digest-cron: ${APP_DAILY_DIGEST_CRON:0 0 8 * * *}
+    zone: ${APP_SCHEDULER_ZONE:America/Sao_Paulo}
+  rss:
+    feeds: ${RSS_FEEDS:https://www.infoq.com/feed/,https://hnrss.org/frontpage}
+  hacker-news:
+    base-url: ${HACKER_NEWS_BASE_URL:https://hacker-news.firebaseio.com/v0}
+    max-items: ${HACKER_NEWS_MAX_ITEMS:10}
+  ranking:
+    keywords: ${RANKING_KEYWORDS:ai,artificial intelligence,java,spring,backend,cloud,devops,security,postgres,redis}
+  evolution:
+    base-url: ${EVOLUTION_BASE_URL:}
+    api-key: ${EVOLUTION_API_KEY:}
+    instance: ${EVOLUTION_INSTANCE:}
+    recipient: ${EVOLUTION_RECIPIENT:}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: ${POSTGRES_JDBC_URL:jdbc:postgresql://localhost:5432/hermes_news}
+    username: ${POSTGRES_USER:hermes}
+    password: ${POSTGRES_PASSWORD:hermes}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:hermes_news;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
