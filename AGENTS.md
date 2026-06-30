@@ -41,4 +41,4 @@ Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.loca
 
 ## Security & Configuration
 
-Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message.
+Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation.

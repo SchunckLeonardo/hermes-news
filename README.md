@@ -98,6 +98,14 @@ POST /message/sendText/{instance}
 
 with `apikey` header and body containing `number` and `text`.
 
+To connect WhatsApp locally, open:
+
+```text
+http://localhost:8081/manager/
+```
+
+Use the local API key `change-me-local-only` if prompted, create or select the `hermes-local` instance, then scan the QR code. Docker Compose overrides Evolution's bundled WhatsApp Web version with `EVOLUTION_SESSION_PHONE_VERSION=` so Evolution can resolve a current Baileys version; leave this empty unless you intentionally need to pin a version.
+
 ## Postman
 
 Import these files into Postman:
