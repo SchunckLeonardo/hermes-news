@@ -7,7 +7,8 @@ public record EvolutionProperties(
 		String baseUrl,
 		String apiKey,
 		String instance,
-		String recipient) {
+		String recipient,
+		String allowedSender) {
 
 	public boolean isComplete() {
 		return hasBaseConfiguration() && hasText(recipient);
@@ -18,7 +19,14 @@ public record EvolutionProperties(
 	}
 
 	public EvolutionProperties withRecipient(String recipient) {
-		return new EvolutionProperties(baseUrl, apiKey, instance, recipient);
+		return new EvolutionProperties(baseUrl, apiKey, instance, recipient, allowedSender);
+	}
+
+	public String allowedSenderOrRecipient() {
+		if (hasText(allowedSender)) {
+			return allowedSender;
+		}
+		return recipient;
 	}
 
 	private static boolean hasText(String value) {

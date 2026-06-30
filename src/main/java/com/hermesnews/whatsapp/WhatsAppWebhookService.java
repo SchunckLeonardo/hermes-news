@@ -75,13 +75,14 @@ public class WhatsAppWebhookService {
 				event, instance, jidType(remoteJid), text.length());
 		var response = agentService.handleIncomingText(text);
 		if (hasText(response)) {
-			var result = whatsAppService.sendTextTo(recipient, response);
+			var replyRecipient = replyRecipientFor(recipient);
+			var result = whatsAppService.sendTextTo(replyRecipient, response);
 			if (result.status() == WhatsAppSendStatus.SENT) {
-				log.info("WhatsApp reply sent instance={} remoteType={}", instance, jidType(recipient));
+				log.info("WhatsApp reply sent instance={} remoteType={}", instance, jidType(replyRecipient));
 			}
 			else {
 				log.warn("WhatsApp reply was not sent instance={} remoteType={} status={} detail={}",
-						instance, jidType(recipient), result.status(), result.detail());
+						instance, jidType(replyRecipient), result.status(), result.detail());
 			}
 		}
 	}
@@ -125,11 +126,19 @@ public class WhatsAppWebhookService {
 	}
 
 	private boolean isAuthorizedSender(String recipient) {
-		var allowedRecipient = evolutionProperties.recipient();
+		var allowedRecipient = evolutionProperties.allowedSenderOrRecipient();
 		if (!hasText(allowedRecipient)) {
 			return false;
 		}
 		return normalizeRecipient(recipient).equals(normalizeRecipient(allowedRecipient));
+	}
+
+	private String replyRecipientFor(String inboundRecipient) {
+		if (isLidRecipient(inboundRecipient) && hasText(evolutionProperties.recipient())
+				&& !isLidRecipient(evolutionProperties.recipient())) {
+			return evolutionProperties.recipient();
+		}
+		return inboundRecipient;
 	}
 
 	private static String normalizeRecipient(String value) {
@@ -149,6 +158,10 @@ public class WhatsAppWebhookService {
 			normalized = normalized.substring(0, deviceIndex);
 		}
 		return normalized.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
+	}
+
+	private static boolean isLidRecipient(String value) {
+		return hasText(value) && value.trim().endsWith("@lid");
 	}
 
 	private static String jidType(String remoteJid) {

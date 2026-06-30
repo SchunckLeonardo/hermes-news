@@ -54,12 +54,12 @@ class WhatsAppWebhookServiceTest {
 	}
 
 	@Test
-	void preservesLidRemoteJidWhenReplyingToInboundText() throws Exception {
+	void repliesToConfiguredRecipientWhenAllowedSenderIsLid() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("quais sao as noticias de hoje?")).thenReturn("Aqui esta o resumo.");
-		when(whatsAppService.sendTextTo("24155080654903@lid", "Aqui esta o resumo."))
+		when(whatsAppService.sendTextTo("5511999999999", "Aqui esta o resumo."))
 				.thenReturn(WhatsAppSendResult.sent());
-		var service = serviceWithRecipient("24155080654903@lid");
+		var service = serviceWithRecipientAndAllowedSender("5511999999999", "24155080654903@lid");
 
 		service.record(objectMapper.readTree("""
 				{
@@ -78,7 +78,7 @@ class WhatsAppWebhookServiceTest {
 				"""));
 
 		verify(agentService).handleIncomingText("quais sao as noticias de hoje?");
-		verify(whatsAppService).sendTextTo("24155080654903@lid", "Aqui esta o resumo.");
+		verify(whatsAppService).sendTextTo("5511999999999", "Aqui esta o resumo.");
 	}
 
 	@Test
@@ -155,7 +155,11 @@ class WhatsAppWebhookServiceTest {
 	}
 
 	private WhatsAppWebhookService serviceWithRecipient(String recipient) {
-		var properties = new EvolutionProperties("http://evolution", "key", "hermes-local", recipient);
+		return serviceWithRecipientAndAllowedSender(recipient, recipient);
+	}
+
+	private WhatsAppWebhookService serviceWithRecipientAndAllowedSender(String recipient, String allowedSender) {
+		var properties = new EvolutionProperties("http://evolution", "key", "hermes-local", recipient, allowedSender);
 		return new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService, properties);
 	}
 }

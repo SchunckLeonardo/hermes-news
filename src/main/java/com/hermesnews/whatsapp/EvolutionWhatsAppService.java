@@ -30,10 +30,18 @@ public class EvolutionWhatsAppService implements WhatsAppService {
 		if (recipient == null || recipient.isBlank()) {
 			return WhatsAppSendResult.skipped("recipient is empty");
 		}
+		if (isLidRecipient(recipient)) {
+			log.warn("Skipping WhatsApp send because Evolution sendText requires a phone number recipient");
+			return WhatsAppSendResult.skipped("recipient must be a phone number for Evolution sendText");
+		}
 		if (!properties.hasBaseConfiguration()) {
 			log.info("Skipping WhatsApp send because Evolution API configuration is incomplete");
 			return WhatsAppSendResult.skipped("Evolution API configuration is incomplete");
 		}
 		return client.sendText(properties.withRecipient(recipient), message);
+	}
+
+	private static boolean isLidRecipient(String recipient) {
+		return recipient.trim().endsWith("@lid");
 	}
 }

@@ -29,7 +29,7 @@ public class EvolutionApiWebClient implements EvolutionApiClient {
 					.uri("/message/sendText/{instance}", properties.instance())
 					.header("apikey", properties.apiKey())
 					.header(HttpHeaders.CONTENT_TYPE, "application/json")
-					.bodyValue(Map.of("number", properties.recipient(), "text", message))
+					.bodyValue(sendTextPayload(properties.recipient(), message))
 					.retrieve()
 					.toBodilessEntity()
 					.block(Duration.ofSeconds(15));
@@ -39,5 +39,27 @@ public class EvolutionApiWebClient implements EvolutionApiClient {
 			log.warn("Evolution API send failed: {}", exception.getMessage());
 			return WhatsAppSendResult.failed("Evolution API send failed");
 		}
+	}
+
+	static Map<String, Object> sendTextPayload(String recipient, String message) {
+		return Map.of(
+				"number", toEvolutionNumber(recipient),
+				"textMessage", Map.of("text", message));
+	}
+
+	static String toEvolutionNumber(String recipient) {
+		if (recipient == null || recipient.isBlank()) {
+			return "";
+		}
+		var value = recipient.trim();
+		var atIndex = value.indexOf('@');
+		if (atIndex >= 0) {
+			value = value.substring(0, atIndex);
+		}
+		var deviceIndex = value.indexOf(':');
+		if (deviceIndex >= 0) {
+			value = value.substring(0, deviceIndex);
+		}
+		return value.replaceAll("[^0-9]", "");
 	}
 }

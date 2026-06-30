@@ -47,6 +47,7 @@ app:
     api-key: ${EVOLUTION_API_KEY:}
     instance: ${EVOLUTION_INSTANCE:}
     recipient: ${EVOLUTION_RECIPIENT:}
+    allowed-sender: ${EVOLUTION_ALLOWED_SENDER:}
 
 ---
 spring:

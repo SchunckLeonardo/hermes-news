@@ -18,7 +18,7 @@ class EvolutionWhatsAppServiceTest {
 
 	@Test
 	void skipsSendWhenCredentialsAreMissing() {
-		var service = new EvolutionWhatsAppService(new EvolutionProperties("", "", "", ""), client);
+		var service = new EvolutionWhatsAppService(new EvolutionProperties("", "", "", "", ""), client);
 
 		var result = service.sendText("hello");
 
@@ -28,7 +28,7 @@ class EvolutionWhatsAppServiceTest {
 
 	@Test
 	void sendsWhenConfigurationIsComplete() {
-		var properties = new EvolutionProperties("https://evolution.example", "key", "personal", "+5511999999999");
+		var properties = new EvolutionProperties("https://evolution.example", "key", "personal", "+5511999999999", "");
 		when(client.sendText(properties, "digest")).thenReturn(WhatsAppSendResult.sent());
 		var service = new EvolutionWhatsAppService(properties, client);
 
@@ -36,5 +36,17 @@ class EvolutionWhatsAppServiceTest {
 
 		assertThat(result.status()).isEqualTo(WhatsAppSendStatus.SENT);
 		verify(client).sendText(properties, "digest");
+	}
+
+	@Test
+	void skipsSendWhenRecipientIsLidBecauseSendTextRequiresPhoneNumber() {
+		var properties = new EvolutionProperties("https://evolution.example", "key", "personal", "24155080654903@lid", "");
+		var service = new EvolutionWhatsAppService(properties, client);
+
+		var result = service.sendText("digest");
+
+		assertThat(result.status()).isEqualTo(WhatsAppSendStatus.SKIPPED);
+		assertThat(result.detail()).contains("phone number");
+		verifyNoInteractions(client);
 	}
 }

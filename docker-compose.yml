@@ -47,6 +47,7 @@ services:
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-change-me-local-only}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-hermes-local}
       EVOLUTION_RECIPIENT: ${EVOLUTION_RECIPIENT:-}
+      EVOLUTION_ALLOWED_SENDER: ${EVOLUTION_ALLOWED_SENDER:-}
     ports:
       - "8080:8080"
     depends_on:

@@ -107,10 +107,11 @@ Local defaults are safe placeholders:
 EVOLUTION_API_KEY=change-me-local-only
 EVOLUTION_INSTANCE=hermes-local
 EVOLUTION_RECIPIENT=
+EVOLUTION_ALLOWED_SENDER=
 EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook
 ```
 
-`EVOLUTION_RECIPIENT` has two jobs: it is the default recipient for scheduled/manual digests and the allowlist for inbound agent replies. If another sender messages Hermes, the app replies with a fixed private-assistant message and does not call the agent. When Evolution emits inbound senders as `@lid`, set `EVOLUTION_RECIPIENT` to that exact JID, for example `24155080654903@lid`.
+`EVOLUTION_RECIPIENT` must be the phone number that receives scheduled/manual digests, using country code and digits only, for example `5511999999999`. `EVOLUTION_ALLOWED_SENDER` is optional and controls who can trigger the WhatsApp agent. If Evolution emits inbound senders as `@lid`, put that exact JID in `EVOLUTION_ALLOWED_SENDER`, for example `24155080654903@lid`, and keep `EVOLUTION_RECIPIENT` as the real phone number. If `EVOLUTION_ALLOWED_SENDER` is empty, the app falls back to `EVOLUTION_RECIPIENT` for the allowlist.
 
 The sender posts to:
 
@@ -118,7 +119,7 @@ The sender posts to:
 POST /message/sendText/{instance}
 ```
 
-with `apikey` header and body containing `number` and `text`.
+with `apikey` header and body containing `number` and `textMessage.text`.
 
 To connect WhatsApp locally, open:
 
