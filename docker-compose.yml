@@ -32,6 +32,10 @@ services:
       POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hermes_news}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      EVOLUTION_BASE_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-change-me-local-only}
+      EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-hermes-local}
+      EVOLUTION_RECIPIENT: ${EVOLUTION_RECIPIENT:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -39,6 +43,64 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      evolution-api:
+        condition: service_started
+
+  evolution-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${EVOLUTION_POSTGRES_DB:-evolution}
+      POSTGRES_USER: ${EVOLUTION_POSTGRES_USER:-evolution}
+      POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:-evolution}
+    ports:
+      - "5433:5432"
+    volumes:
+      - evolution-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-evolution} -d $${POSTGRES_DB:-evolution}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.1.1
+    restart: unless-stopped
+    environment:
+      SERVER_TYPE: http
+      SERVER_PORT: 8080
+      SERVER_URL: ${EVOLUTION_SERVER_URL:-http://localhost:8081}
+      DEL_INSTANCE: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${EVOLUTION_POSTGRES_USER:-evolution}:${EVOLUTION_POSTGRES_PASSWORD:-evolution}@evolution-postgres:5432/${EVOLUTION_POSTGRES_DB:-evolution}?schema=public
+      DATABASE_CONNECTION_CLIENT_NAME: evolution_api
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      RABBITMQ_ENABLED: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/1
+      CACHE_REDIS_PREFIX_KEY: evolution_api
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-change-me-local-only}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      LANGUAGE: pt-BR
+    ports:
+      - "8081:8080"
+    volumes:
+      - evolution-instances:/evolution/instances
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres-data:
+  evolution-postgres-data:
+  evolution-instances:

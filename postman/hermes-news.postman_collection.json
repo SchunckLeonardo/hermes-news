@@ -1,0 +1,198 @@
+{
+  "info": {
+    "_postman_id": "b77cb705-ad8d-4e84-ad04-73f808170423",
+    "name": "Hermes News",
+    "description": "Local smoke tests for Hermes News and the local Evolution API container.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.environment.set('request_guid', pm.variables.replaceIn('{{$guid}}'));",
+          "pm.environment.set('request_timestamp', pm.variables.replaceIn('{{$timestamp}}'));",
+          "pm.environment.set('request_iso_timestamp', pm.variables.replaceIn('{{$isoTimestamp}}'));",
+          "pm.environment.set('request_random_int', pm.variables.replaceIn('{{$randomInt}}'));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Hermes News API",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/health",
+              "host": ["{{base_url}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('health is UP', function () { pm.expect(pm.response.json().status).to.eql('UP'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Daily Digest",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/digests/send-daily",
+              "host": ["{{base_url}}"],
+              "path": ["api", "digests", "send-daily"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "const body = pm.response.json();",
+                  "pm.test('response contains article count', function () { pm.expect(body).to.have.property('articleCount'); });",
+                  "pm.test('response contains WhatsApp status', function () { pm.expect(body.whatsAppStatus).to.be.oneOf(['SENT', 'SKIPPED', 'FAILED']); });",
+                  "if (body.message) { pm.environment.set('last_digest_message', body.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Receive WhatsApp Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"requestId\": \"{{request_guid}}\",\n  \"timestamp\": \"{{request_timestamp}}\",\n  \"createdAt\": \"{{request_iso_timestamp}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"5511999999999@s.whatsapp.net\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"Postman webhook smoke {{$randomInt}}\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/whatsapp/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["api", "whatsapp", "webhook"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "pm.test('webhook accepted', function () { pm.expect(pm.response.json().status).to.eql('accepted'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Evolution API Local",
+      "item": [
+        {
+          "name": "Evolution Root",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{evolution_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{evolution_base_url}}",
+              "host": ["{{evolution_base_url}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Evolution responds', function () { pm.expect(pm.response.code).to.be.oneOf([200, 301, 302, 404]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send Text Through Evolution",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{evolution_api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"number\": \"{{evolution_recipient}}\",\n  \"text\": \"Hermes News Postman smoke {{$timestamp}} / {{$guid}}\"\n}"
+            },
+            "url": {
+              "raw": "{{evolution_base_url}}/message/sendText/{{evolution_instance}}",
+              "host": ["{{evolution_base_url}}"],
+              "path": ["message", "sendText", "{{evolution_instance}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('evolution_recipient')) {",
+                  "  console.warn('Set evolution_recipient before sending a real WhatsApp message.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Evolution send endpoint responded', function () { pm.expect(pm.response.code).to.be.below(500); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "collection_created_by",
+      "value": "Codex"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ This is a modular monolith under `com.hermesnews`:
 - `whatsapp`: Evolution API send client and `POST /api/whatsapp/webhook`.
 - `scheduler`: daily digest at 08:00 in `America/Sao_Paulo`.
 
-Data is stored in PostgreSQL with Flyway migrations. Redis is available for future caching or queueing.
+Data is stored in PostgreSQL with Flyway migrations. Redis is available for caching/queueing and is also used by the local Evolution API container.
 
 ## Running Locally
 
@@ -23,7 +23,7 @@ Create local configuration from the example if you need to override defaults:
 cp .env.example .env
 ```
 
-Start infrastructure and the app:
+Start infrastructure, Evolution API and the app:
 
 ```bash
 docker compose up -d
@@ -65,13 +65,30 @@ Key variables are documented in `.env.example`:
 - `RSS_FEEDS`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
 - `RANKING_KEYWORDS`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
+- `EVOLUTION_SERVER_URL`, `EVOLUTION_POSTGRES_DB`, `EVOLUTION_POSTGRES_USER`, `EVOLUTION_POSTGRES_PASSWORD`
 - `APP_DAILY_DIGEST_CRON`, `APP_SCHEDULER_ZONE`
 
 Do not commit real credentials.
 
 ## Evolution API
 
-Set the Evolution variables only when a real instance is ready. Without complete Evolution configuration, WhatsApp sending is skipped safely and the digest endpoint still works.
+Docker Compose runs a local Evolution API at:
+
+```text
+http://localhost:8081
+```
+
+The app container talks to it internally through `http://evolution-api:8080`. Evolution has its own PostgreSQL container and uses Redis database `1`, so it does not share the application schema managed by Flyway.
+
+Local defaults are safe placeholders:
+
+```text
+EVOLUTION_API_KEY=change-me-local-only
+EVOLUTION_INSTANCE=hermes-local
+EVOLUTION_RECIPIENT=
+```
+
+Keep `EVOLUTION_RECIPIENT` empty until you want to send a real WhatsApp message. Without a recipient, Hermes News skips WhatsApp sending safely and the digest endpoint still works.
 
 The sender posts to:
 
@@ -80,6 +97,25 @@ POST /message/sendText/{instance}
 ```
 
 with `apikey` header and body containing `number` and `text`.
+
+## Postman
+
+Import these files into Postman:
+
+- `postman/hermes-news.postman_collection.json`
+- `postman/hermes-news.local.postman_environment.json`
+
+The collection includes health, manual digest, webhook, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
+
+Run the collection directly in Postman with the `Hermes News Local` environment selected.
+
+If you already have Newman installed, you can also run:
+
+```bash
+./scripts/run-postman-local.sh
+```
+
+The script does not install Newman or any npm package automatically.
 
 ## Testing
 

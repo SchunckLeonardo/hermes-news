@@ -11,14 +11,15 @@
 - `whatsapp`: Evolution API sender and webhook handling.
 - `scheduler`: daily 08:00 `America/Sao_Paulo` job.
 
-Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/main/resources/db/migration`.
+Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/main/resources/db/migration`. Postman artifacts live in `postman/` and local automation scripts live in `scripts/`.
 
 ## Build, Test, and Development Commands
 
 - `./gradlew clean build`: compile, test and package the app.
 - `./gradlew test`: run the full JUnit 5 suite.
 - `./gradlew bootRun`: run locally using the default `local` profile.
-- `docker compose up -d`: start PostgreSQL, Redis and the app.
+- `docker compose up -d`: start PostgreSQL, Redis, Evolution API and the app.
+- `./scripts/run-postman-local.sh`: run the Postman collection only when `newman` is already installed; do not auto-install npm packages.
 
 Use Gradle only. Do not add Maven or `pom.xml`.
 
@@ -34,6 +35,10 @@ Follow red-green-refactor for every change. Write or update the failing test fir
 
 Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile uses H2 in PostgreSQL mode with Flyway enabled. Do not require live RSS, Hacker News, LLM or Evolution API access during tests; mock external boundaries.
 
+## Postman Guidelines
+
+Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.local.postman_environment.json` aligned with every public endpoint. Use Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` for webhook IDs, timestamps and smoke-test payloads. Secret-like environment values must use placeholders and `type: "secret"` where supported. Do not add scripts that install Newman or other npm tools automatically.
+
 ## Security & Configuration
 
-Never commit real API keys, WhatsApp tokens or `.env` files. Use `.env.example` for safe placeholders. The Evolution sender must remain safe without credentials and skip sends instead of failing startup.
+Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message.
