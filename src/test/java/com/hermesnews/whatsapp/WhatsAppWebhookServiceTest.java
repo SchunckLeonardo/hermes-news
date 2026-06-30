@@ -31,7 +31,7 @@ class WhatsAppWebhookServiceTest {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("me manda noticias de IA")).thenReturn("Vou enviar o digest.");
 		when(whatsAppService.sendTextTo("5511999999999", "Vou enviar o digest.")).thenReturn(WhatsAppSendResult.sent());
-		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+		var service = serviceWithRecipient("5511999999999");
 
 		service.record(objectMapper.readTree("""
 				{
@@ -59,7 +59,7 @@ class WhatsAppWebhookServiceTest {
 		when(agentService.handleIncomingText("quais sao as noticias de hoje?")).thenReturn("Aqui esta o resumo.");
 		when(whatsAppService.sendTextTo("24155080654903@lid", "Aqui esta o resumo."))
 				.thenReturn(WhatsAppSendResult.sent());
-		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+		var service = serviceWithRecipient("24155080654903@lid");
 
 		service.record(objectMapper.readTree("""
 				{
@@ -84,7 +84,7 @@ class WhatsAppWebhookServiceTest {
 	@Test
 	void ignoresMessagesSentByTheConnectedAccount() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+		var service = serviceWithRecipient("5511999999999");
 
 		service.record(objectMapper.readTree("""
 				{
@@ -107,7 +107,7 @@ class WhatsAppWebhookServiceTest {
 	@Test
 	void ignoresGroupMessages() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
-		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+		var service = serviceWithRecipient("5511999999999");
 
 		service.record(objectMapper.readTree("""
 				{
@@ -125,5 +125,37 @@ class WhatsAppWebhookServiceTest {
 				"""));
 
 		verifyNoInteractions(agentService, whatsAppService);
+	}
+
+	@Test
+	void rejectsInboundTextFromUnauthorizedSenderWithFixedMessage() throws Exception {
+		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(whatsAppService.sendTextTo("5511888888888", WhatsAppWebhookService.UNAUTHORIZED_SENDER_MESSAGE))
+				.thenReturn(WhatsAppSendResult.sent());
+		var service = serviceWithRecipient("5511999999999");
+
+		service.record(objectMapper.readTree("""
+				{
+				  "event": "messages.upsert",
+				  "instance": "hermes-local",
+				  "data": {
+				    "key": {
+				      "remoteJid": "5511888888888@s.whatsapp.net",
+				      "fromMe": false
+				    },
+				    "message": {
+				      "conversation": "oi"
+				    }
+				  }
+				}
+				"""));
+
+		verifyNoInteractions(agentService);
+		verify(whatsAppService).sendTextTo("5511888888888", WhatsAppWebhookService.UNAUTHORIZED_SENDER_MESSAGE);
+	}
+
+	private WhatsAppWebhookService serviceWithRecipient(String recipient) {
+		var properties = new EvolutionProperties("http://evolution", "key", "hermes-local", recipient);
+		return new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService, properties);
 	}
 }

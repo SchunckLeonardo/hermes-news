@@ -27,6 +27,35 @@ class OllamaAgentInterpreterTest {
 	}
 
 	@Test
+	void parsesPreferenceUpdateFromAiResponse() {
+		var client = new CapturingAiChatClient("""
+				{
+				  "action": "UPDATE_PREFERENCES",
+				  "response": "Preferencias atualizadas.",
+				  "preferences": {
+				    "addThemes": ["java"],
+				    "removeThemes": ["frontend"],
+				    "sources": ["infoq"],
+				    "newsLimit": 7,
+				    "digestTime": "07:30",
+				    "language": "pt-BR"
+				  }
+				}
+				""");
+		var interpreter = new OllamaAgentInterpreter(client, new ObjectMapper());
+
+		var decision = interpreter.interpret("quero mais noticias de Java e menos frontend");
+
+		assertThat(decision.action()).isEqualTo(AgentAction.UPDATE_PREFERENCES);
+		assertThat(decision.preferenceUpdate().addThemes()).containsExactly("java");
+		assertThat(decision.preferenceUpdate().removeThemes()).containsExactly("frontend");
+		assertThat(decision.preferenceUpdate().sources()).containsExactly("infoq");
+		assertThat(decision.preferenceUpdate().newsLimit()).isEqualTo(7);
+		assertThat(decision.preferenceUpdate().digestTime().toString()).isEqualTo("07:30");
+		assertThat(decision.preferenceUpdate().language()).isEqualTo("pt-BR");
+	}
+
+	@Test
 	void fallsBackToSafeAnswerWhenAiResponseIsInvalid() {
 		var interpreter = new OllamaAgentInterpreter((systemPrompt, userPrompt) -> "not-json", new ObjectMapper());
 

@@ -8,6 +8,7 @@ This is a modular monolith under `com.hermesnews`:
 
 - `news`: RSS parser/collector, Hacker News client, articles and sources.
 - `ranking`: keyword-based scoring.
+- `preferences`: persisted personal preferences for themes, sources, news count, preferred time and language.
 - `ai`: Spring AI abstraction for Ollama/qwen3 with a mock fallback in tests.
 - `agent`: WhatsApp conversational agent that chooses safe internal actions.
 - `digest`: orchestration and `POST /api/digests/send-daily`.
@@ -109,7 +110,7 @@ EVOLUTION_RECIPIENT=
 EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook
 ```
 
-Keep `EVOLUTION_RECIPIENT` empty until you want the scheduled/manual digest to send to a fixed phone number. Replies to inbound WhatsApp messages do not use `EVOLUTION_RECIPIENT`; they use the sender from the Evolution webhook.
+`EVOLUTION_RECIPIENT` has two jobs: it is the default recipient for scheduled/manual digests and the allowlist for inbound agent replies. If another sender messages Hermes, the app replies with a fixed private-assistant message and does not call the agent. When Evolution emits inbound senders as `@lid`, set `EVOLUTION_RECIPIENT` to that exact JID, for example `24155080654903@lid`.
 
 The sender posts to:
 
@@ -151,6 +152,25 @@ To confirm delivery, send a WhatsApp message to the connected number and watch:
 docker compose logs -f app evolution-api
 ```
 
+## Agent and Preferences
+
+The agent currently supports only these actions:
+
+- Generate and send the daily technology digest.
+- Answer direct questions about what the agent can do.
+- Update personal preferences for themes, sources, news count, preferred time and language.
+- Use saved themes, excluded themes, preferred sources and news count in ranking/digest generation.
+
+Example preference commands:
+
+```text
+quero mais noticias de Java e menos frontend
+quero 7 noticias por dia
+priorize InfoQ e Hacker News
+```
+
+Preferred digest time and language are persisted for future behavior, but the current scheduler still runs from `APP_DAILY_DIGEST_CRON`.
+
 ## Postman
 
 Import these files into Postman:
@@ -184,6 +204,6 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 
 - Add richer RSS source management in the database.
 - Add duplicate detection beyond URL matching.
-- Add persisted personal preferences for agent-driven topics, sources and schedule changes.
+- Apply persisted preferred time directly to the scheduler instead of only storing it.
 - Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
 - Use Redis for digest job locking or cache if the app grows.

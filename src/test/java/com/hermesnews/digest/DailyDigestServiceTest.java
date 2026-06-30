@@ -11,8 +11,12 @@ import com.hermesnews.news.Article;
 import com.hermesnews.news.ArticleRepository;
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.preferences.PersonalPreference;
+import com.hermesnews.preferences.PreferenceService;
+import com.hermesnews.preferences.PreferenceUpdateRequest;
 import com.hermesnews.ranking.RankingProperties;
 import com.hermesnews.ranking.RankingService;
+import com.hermesnews.ranking.RankedArticle;
 import com.hermesnews.whatsapp.WhatsAppSendResult;
 import com.hermesnews.whatsapp.WhatsAppSendStatus;
 import com.hermesnews.whatsapp.WhatsAppService;
@@ -20,6 +24,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -44,8 +49,12 @@ class DailyDigestServiceTest {
 	@Mock
 	private WhatsAppService whatsAppService;
 
+	@Mock
+	private PreferenceService preferenceService;
+
 	@Test
 	void collectsRanksPersistsSummarizesAndSendsDigest() {
+		when(preferenceService.current()).thenReturn(PersonalPreference.defaults());
 		var collected = new CollectedArticle(
 				"rss",
 				"article-1",
@@ -67,12 +76,59 @@ class DailyDigestServiceTest {
 				digestItemRepository,
 				new RankingService(new RankingProperties(List.of("ai", "java", "backend", "cloud"))),
 				aiSummaryService,
-				whatsAppService);
+				whatsAppService,
+				preferenceService);
 
 		var result = service.sendDailyDigest();
 
 		assertThat(result.articleCount()).isEqualTo(1);
 		assertThat(result.whatsAppStatus()).isEqualTo(WhatsAppSendStatus.SENT);
 		verify(digestItemRepository).save(any(DigestItem.class));
+	}
+
+	@Test
+	void limitsDigestItemsUsingPersonalPreferenceNewsLimit() {
+		var preferences = PersonalPreference.defaults();
+		preferences.apply(new PreferenceUpdateRequest(List.of(), List.of(), List.of(), 1, null, null));
+		when(preferenceService.current()).thenReturn(preferences);
+		var first = new CollectedArticle(
+				"rss",
+				"article-1",
+				"AI for Java backend teams",
+				"https://example.com/ai-java",
+				"Cloud backend summary",
+				Instant.parse("2026-06-29T08:00:00Z"));
+		var second = new CollectedArticle(
+				"rss",
+				"article-2",
+				"Redis backend patterns",
+				"https://example.com/redis",
+				"Backend summary",
+				Instant.parse("2026-06-29T07:00:00Z"));
+		when(collector.collect()).thenReturn(List.of(first, second));
+		when(articleRepository.existsByUrl(first.url())).thenReturn(false);
+		when(articleRepository.existsByUrl(second.url())).thenReturn(false);
+		when(articleRepository.save(any(Article.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(digestRepository.save(any(Digest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(digestItemRepository.save(any(DigestItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(aiSummaryService.summarize(anyList())).thenReturn("digest message");
+		when(whatsAppService.sendText("digest message")).thenReturn(WhatsAppSendResult.sent());
+		var service = new DailyDigestService(
+				List.of(collector),
+				articleRepository,
+				digestRepository,
+				digestItemRepository,
+				new RankingService(new RankingProperties(List.of("ai", "java", "backend", "cloud"))),
+				aiSummaryService,
+				whatsAppService,
+				preferenceService);
+
+		service.sendDailyDigest();
+
+		@SuppressWarnings("unchecked")
+		ArgumentCaptor<List<RankedArticle>> captor = ArgumentCaptor.forClass(List.class);
+		verify(aiSummaryService).summarize(captor.capture());
+		assertThat(captor.getValue()).hasSize(1);
+		assertThat(captor.getValue().getFirst()).isInstanceOf(RankedArticle.class);
 	}
 }

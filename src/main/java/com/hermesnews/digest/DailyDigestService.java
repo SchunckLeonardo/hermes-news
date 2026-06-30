@@ -5,6 +5,7 @@ import com.hermesnews.news.Article;
 import com.hermesnews.news.ArticleRepository;
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.ranking.RankedArticle;
 import com.hermesnews.ranking.RankingService;
 import com.hermesnews.whatsapp.WhatsAppService;
@@ -28,6 +29,7 @@ public class DailyDigestService {
 	private final RankingService rankingService;
 	private final AiSummaryService aiSummaryService;
 	private final WhatsAppService whatsAppService;
+	private final PreferenceService preferenceService;
 
 	public DailyDigestService(
 			List<NewsCollector> collectors,
@@ -36,7 +38,8 @@ public class DailyDigestService {
 			DigestItemRepository digestItemRepository,
 			RankingService rankingService,
 			AiSummaryService aiSummaryService,
-			WhatsAppService whatsAppService) {
+			WhatsAppService whatsAppService,
+			PreferenceService preferenceService) {
 		this.collectors = collectors;
 		this.articleRepository = articleRepository;
 		this.digestRepository = digestRepository;
@@ -44,6 +47,7 @@ public class DailyDigestService {
 		this.rankingService = rankingService;
 		this.aiSummaryService = aiSummaryService;
 		this.whatsAppService = whatsAppService;
+		this.preferenceService = preferenceService;
 	}
 
 	@Transactional
@@ -52,7 +56,10 @@ public class DailyDigestService {
 		var newArticles = deduplicateByUrl(collected).stream()
 				.filter(article -> !articleRepository.existsByUrl(article.url()))
 				.toList();
-		var ranked = rankingService.rank(newArticles);
+		var newsLimit = Math.max(1, preferenceService.current().newsLimit());
+		var ranked = rankingService.rank(newArticles).stream()
+				.limit(newsLimit)
+				.toList();
 		var savedArticles = new ArrayList<Article>();
 		for (RankedArticle rankedArticle : ranked) {
 			savedArticles.add(articleRepository.save(Article.from(rankedArticle.article(), rankedArticle.score())));

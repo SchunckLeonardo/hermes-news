@@ -1,11 +1,16 @@
 package com.hermesnews.ranking;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 import com.hermesnews.news.CollectedArticle;
+import com.hermesnews.preferences.PersonalPreference;
+import com.hermesnews.preferences.PreferenceService;
+import com.hermesnews.preferences.PreferenceUpdateRequest;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 class RankingServiceTest {
 
@@ -29,5 +34,36 @@ class RankingServiceTest {
 
 		assertThat(service.score(relevant)).isGreaterThan(service.score(irrelevant));
 		assertThat(service.rank(List.of(irrelevant, relevant)).getFirst().article()).isEqualTo(relevant);
+	}
+
+	@Test
+	void usesPersonalPreferencesToBoostThemesSourcesAndReduceExcludedThemes() {
+		var preferences = PersonalPreference.defaults();
+		preferences.apply(new PreferenceUpdateRequest(
+				List.of("java"),
+				List.of("frontend"),
+				List.of("infoq"),
+				null,
+				null,
+				null));
+		var preferenceService = Mockito.mock(PreferenceService.class);
+		when(preferenceService.current()).thenReturn(preferences);
+		var service = new RankingService(new RankingProperties(List.of()), preferenceService);
+		var preferred = new CollectedArticle(
+				"InfoQ",
+				"1",
+				"Java virtual threads for backend teams",
+				"https://example.com/java",
+				"Deep dive",
+				Instant.parse("2026-06-29T10:00:00Z"));
+		var excluded = new CollectedArticle(
+				"Other",
+				"2",
+				"Frontend framework update",
+				"https://example.com/frontend",
+				"UI notes",
+				Instant.parse("2026-06-29T10:00:00Z"));
+
+		assertThat(service.score(preferred)).isGreaterThan(service.score(excluded));
 	}
 }

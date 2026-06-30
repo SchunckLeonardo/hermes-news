@@ -11,22 +11,27 @@ import org.springframework.stereotype.Service;
 @Service
 public class WhatsAppWebhookService {
 
+	public static final String UNAUTHORIZED_SENDER_MESSAGE = "Este assistente e privado.";
+
 	private static final Logger log = LoggerFactory.getLogger(WhatsAppWebhookService.class);
 
 	private final WhatsAppWebhookEventRepository repository;
 	private final ObjectMapper objectMapper;
 	private final AgentService agentService;
 	private final WhatsAppService whatsAppService;
+	private final EvolutionProperties evolutionProperties;
 
 	public WhatsAppWebhookService(
 			WhatsAppWebhookEventRepository repository,
 			ObjectMapper objectMapper,
 			AgentService agentService,
-			WhatsAppService whatsAppService) {
+			WhatsAppService whatsAppService,
+			EvolutionProperties evolutionProperties) {
 		this.repository = repository;
 		this.objectMapper = objectMapper;
 		this.agentService = agentService;
 		this.whatsAppService = whatsAppService;
+		this.evolutionProperties = evolutionProperties;
 	}
 
 	public WhatsAppWebhookEvent record(JsonNode payload) {
@@ -58,6 +63,12 @@ public class WhatsAppWebhookService {
 		if (!hasText(recipient)) {
 			log.debug("Ignoring WhatsApp webhook event={} instance={} remoteType={} because recipient is unsupported",
 					event, instance, jidType(remoteJid));
+			return;
+		}
+		if (!isAuthorizedSender(recipient)) {
+			log.warn("Rejecting WhatsApp inbound text from unauthorized sender instance={} remoteType={}",
+					instance, jidType(remoteJid));
+			whatsAppService.sendTextTo(recipient, UNAUTHORIZED_SENDER_MESSAGE);
 			return;
 		}
 		log.info("Handling WhatsApp inbound text event={} instance={} remoteType={} textLength={}",
@@ -111,6 +122,33 @@ public class WhatsAppWebhookService {
 			value = value.substring(0, deviceIndex);
 		}
 		return value;
+	}
+
+	private boolean isAuthorizedSender(String recipient) {
+		var allowedRecipient = evolutionProperties.recipient();
+		if (!hasText(allowedRecipient)) {
+			return false;
+		}
+		return normalizeRecipient(recipient).equals(normalizeRecipient(allowedRecipient));
+	}
+
+	private static String normalizeRecipient(String value) {
+		if (!hasText(value)) {
+			return "";
+		}
+		var normalized = value.trim();
+		if (normalized.endsWith("@lid")) {
+			return normalized;
+		}
+		var atIndex = normalized.indexOf('@');
+		if (atIndex >= 0) {
+			normalized = normalized.substring(0, atIndex);
+		}
+		var deviceIndex = normalized.indexOf(':');
+		if (deviceIndex >= 0) {
+			normalized = normalized.substring(0, deviceIndex);
+		}
+		return normalized.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
 	}
 
 	private static String jidType(String remoteJid) {
