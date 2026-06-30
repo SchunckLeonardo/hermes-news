@@ -155,7 +155,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"number\": \"{{evolution_recipient}}\",\n  \"textMessage\": {\n    \"text\": \"Hermes News Postman smoke {{$timestamp}} / {{$guid}}\"\n  }\n}"
+              "raw": "{\n  \"number\": \"{{evolution_recipient}}\",\n  \"text\": \"Hermes News Postman smoke {{$timestamp}} / {{$guid}}\"\n}"
             },
             "url": {
               "raw": "{{evolution_base_url}}/message/sendText/{{evolution_instance}}",

@@ -44,7 +44,7 @@ public class EvolutionApiWebClient implements EvolutionApiClient {
 	static Map<String, Object> sendTextPayload(String recipient, String message) {
 		return Map.of(
 				"number", toEvolutionNumber(recipient),
-				"textMessage", Map.of("text", message));
+				"text", message);
 	}
 
 	static String toEvolutionNumber(String recipient) {

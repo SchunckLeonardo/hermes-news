@@ -119,7 +119,7 @@ The sender posts to:
 POST /message/sendText/{instance}
 ```
 
-with `apikey` header and body containing `number` and `textMessage.text`.
+with `apikey` header and body containing `number` and `text` for the local `evoapicloud/evolution-api:v2.1.1` image.
 
 To connect WhatsApp locally, open:
 

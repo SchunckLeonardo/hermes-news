@@ -2,7 +2,6 @@ package com.hermesnews.whatsapp;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class EvolutionApiWebClientTest {
@@ -13,12 +12,8 @@ class EvolutionApiWebClientTest {
 
 		assertThat(payload)
 				.containsEntry("number", "5511999999999")
-				.containsKey("textMessage");
-		assertThat(payload).doesNotContainKey("text");
-		assertThat(payload.get("textMessage"))
-				.isInstanceOf(Map.class)
-				.extracting(value -> ((Map<?, ?>) value).get("text"))
-				.isEqualTo("ola");
+				.containsEntry("text", "ola");
+		assertThat(payload).doesNotContainKey("textMessage");
 	}
 
 	@Test
