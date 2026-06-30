@@ -26,6 +26,14 @@ public class WhatsAppWebhookEvent {
 	@Column(nullable = false, columnDefinition = "text")
 	private String payloadJson;
 
+	@Column(length = 120)
+	private String messageId;
+
+	@Column(length = 180)
+	private String remoteJid;
+
+	private Boolean fromMe;
+
 	@Column(nullable = false)
 	private Instant receivedAt = Instant.now();
 
@@ -33,9 +41,22 @@ public class WhatsAppWebhookEvent {
 	}
 
 	public WhatsAppWebhookEvent(String eventType, String instanceName, String payloadJson) {
+		this(eventType, instanceName, payloadJson, null, null, null);
+	}
+
+	public WhatsAppWebhookEvent(
+			String eventType,
+			String instanceName,
+			String payloadJson,
+			String messageId,
+			String remoteJid,
+			Boolean fromMe) {
 		this.eventType = eventType;
 		this.instanceName = instanceName;
 		this.payloadJson = payloadJson;
+		this.messageId = messageId;
+		this.remoteJid = remoteJid;
+		this.fromMe = fromMe;
 	}
 
 	public UUID getId() {
@@ -52,6 +73,18 @@ public class WhatsAppWebhookEvent {
 
 	public String getPayloadJson() {
 		return payloadJson;
+	}
+
+	public String getMessageId() {
+		return messageId;
+	}
+
+	public String getRemoteJid() {
+		return remoteJid;
+	}
+
+	public Boolean getFromMe() {
+		return fromMe;
 	}
 
 	public Instant getReceivedAt() {

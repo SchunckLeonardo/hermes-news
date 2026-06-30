@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermesnews.agent.AgentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -37,7 +38,31 @@ public class WhatsAppWebhookService {
 	public WhatsAppWebhookEvent record(JsonNode payload) {
 		var event = payload.path("event").asText("unknown");
 		var instance = payload.path("instance").asText(null);
-		var saved = repository.save(new WhatsAppWebhookEvent(event, instance, toJson(payload)));
+		var key = payload.path("data").path("key");
+		var messageId = key.path("id").asText(null);
+		var remoteJid = key.path("remoteJid").asText(null);
+		var fromMe = key.has("fromMe") ? key.path("fromMe").asBoolean(false) : null;
+		if (hasText(messageId)) {
+			var existing = repository.findByInstanceNameAndMessageId(instance, messageId);
+			if (existing.isPresent()) {
+				log.info("Ignoring duplicated WhatsApp webhook event={} instance={} messageId={}",
+						event, instance, messageId);
+				return existing.get();
+			}
+		}
+		var webhookEvent = new WhatsAppWebhookEvent(event, instance, toJson(payload), messageId, remoteJid, fromMe);
+		WhatsAppWebhookEvent saved;
+		try {
+			saved = repository.save(webhookEvent);
+		}
+		catch (DataIntegrityViolationException exception) {
+			if (!hasText(messageId)) {
+				throw exception;
+			}
+			log.info("Ignoring concurrently duplicated WhatsApp webhook event={} instance={} messageId={}",
+					event, instance, messageId);
+			return repository.findByInstanceNameAndMessageId(instance, messageId).orElse(webhookEvent);
+		}
 		handleInboundText(payload);
 		return saved;
 	}

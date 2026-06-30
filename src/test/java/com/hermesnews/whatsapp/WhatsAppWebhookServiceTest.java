@@ -1,12 +1,14 @@
 package com.hermesnews.whatsapp;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermesnews.agent.AgentService;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -28,6 +30,7 @@ class WhatsAppWebhookServiceTest {
 
 	@Test
 	void sendsInboundTextMessageToAgentAndRepliesToSender() throws Exception {
+		when(repository.findByInstanceNameAndMessageId("hermes-local", "3A123")).thenReturn(Optional.empty());
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("me manda noticias de IA")).thenReturn("Vou enviar o digest.");
 		when(whatsAppService.sendTextTo("5511999999999", "Vou enviar o digest.")).thenReturn(WhatsAppSendResult.sent());
@@ -39,6 +42,7 @@ class WhatsAppWebhookServiceTest {
 				  "instance": "hermes-local",
 				  "data": {
 				    "key": {
+				      "id": "3A123",
 				      "remoteJid": "5511999999999@s.whatsapp.net",
 				      "fromMe": false
 				    },
@@ -51,6 +55,40 @@ class WhatsAppWebhookServiceTest {
 
 		verify(agentService).handleIncomingText("me manda noticias de IA");
 		verify(whatsAppService).sendTextTo("5511999999999", "Vou enviar o digest.");
+	}
+
+	@Test
+	void ignoresDuplicatedWebhookMessageIds() throws Exception {
+		var existing = new WhatsAppWebhookEvent(
+				"messages.upsert",
+				"hermes-local",
+				"{}",
+				"3A_DUPLICATED",
+				"5511999999999@s.whatsapp.net",
+				false);
+		when(repository.findByInstanceNameAndMessageId("hermes-local", "3A_DUPLICATED"))
+				.thenReturn(Optional.of(existing));
+		var service = serviceWithRecipient("5511999999999");
+
+		service.record(objectMapper.readTree("""
+				{
+				  "event": "messages.upsert",
+				  "instance": "hermes-local",
+				  "data": {
+				    "key": {
+				      "id": "3A_DUPLICATED",
+				      "remoteJid": "5511999999999@s.whatsapp.net",
+				      "fromMe": false
+				    },
+				    "message": {
+				      "conversation": "me responde uma vez"
+				    }
+				  }
+				}
+				"""));
+
+		verify(repository, never()).save(any(WhatsAppWebhookEvent.class));
+		verifyNoInteractions(agentService, whatsAppService);
 	}
 
 	@Test
