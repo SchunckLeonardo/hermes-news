@@ -1,6 +1,7 @@
 package com.hermesnews.whatsapp;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -33,6 +34,8 @@ class WhatsAppWebhookServiceTest {
 		when(repository.findByInstanceNameAndMessageId("hermes-local", "3A123")).thenReturn(Optional.empty());
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("me manda noticias de IA")).thenReturn("Vou enviar o digest.");
+		when(whatsAppService.sendTextTo("5511999999999", WhatsAppWebhookService.PROCESSING_ACK_MESSAGE))
+				.thenReturn(WhatsAppSendResult.sent());
 		when(whatsAppService.sendTextTo("5511999999999", "Vou enviar o digest.")).thenReturn(WhatsAppSendResult.sent());
 		var service = serviceWithRecipient("5511999999999");
 
@@ -54,7 +57,10 @@ class WhatsAppWebhookServiceTest {
 				"""));
 
 		verify(agentService).handleIncomingText("me manda noticias de IA");
-		verify(whatsAppService).sendTextTo("5511999999999", "Vou enviar o digest.");
+		var ordered = inOrder(whatsAppService, agentService);
+		ordered.verify(whatsAppService).sendTextTo("5511999999999", WhatsAppWebhookService.PROCESSING_ACK_MESSAGE);
+		ordered.verify(agentService).handleIncomingText("me manda noticias de IA");
+		ordered.verify(whatsAppService).sendTextTo("5511999999999", "Vou enviar o digest.");
 	}
 
 	@Test
@@ -95,6 +101,8 @@ class WhatsAppWebhookServiceTest {
 	void repliesToConfiguredRecipientWhenAllowedSenderIsLid() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("quais sao as noticias de hoje?")).thenReturn("Aqui esta o resumo.");
+		when(whatsAppService.sendTextTo("5511999999999", WhatsAppWebhookService.PROCESSING_ACK_MESSAGE))
+				.thenReturn(WhatsAppSendResult.sent());
 		when(whatsAppService.sendTextTo("5511999999999", "Aqui esta o resumo."))
 				.thenReturn(WhatsAppSendResult.sent());
 		var service = serviceWithRecipientAndAllowedSender("5511999999999", "24155080654903@lid");
@@ -116,6 +124,7 @@ class WhatsAppWebhookServiceTest {
 				"""));
 
 		verify(agentService).handleIncomingText("quais sao as noticias de hoje?");
+		verify(whatsAppService).sendTextTo("5511999999999", WhatsAppWebhookService.PROCESSING_ACK_MESSAGE);
 		verify(whatsAppService).sendTextTo("5511999999999", "Aqui esta o resumo.");
 	}
 

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 public class WhatsAppWebhookService {
 
 	public static final String UNAUTHORIZED_SENDER_MESSAGE = "Este assistente e privado.";
+	public static final String PROCESSING_ACK_MESSAGE = "Recebi. Estou processando sua mensagem.";
 
 	private static final Logger log = LoggerFactory.getLogger(WhatsAppWebhookService.class);
 
@@ -98,9 +99,10 @@ public class WhatsAppWebhookService {
 		}
 		log.info("Handling WhatsApp inbound text event={} instance={} remoteType={} textLength={}",
 				event, instance, jidType(remoteJid), text.length());
+		var replyRecipient = replyRecipientFor(recipient);
+		sendProcessingAck(instance, replyRecipient);
 		var response = agentService.handleIncomingText(text);
 		if (hasText(response)) {
-			var replyRecipient = replyRecipientFor(recipient);
 			var result = whatsAppService.sendTextTo(replyRecipient, response);
 			if (result.status() == WhatsAppSendStatus.SENT) {
 				log.info("WhatsApp reply sent instance={} remoteType={}", instance, jidType(replyRecipient));
@@ -110,6 +112,16 @@ public class WhatsAppWebhookService {
 						instance, jidType(replyRecipient), result.status(), result.detail());
 			}
 		}
+	}
+
+	private void sendProcessingAck(String instance, String replyRecipient) {
+		var result = whatsAppService.sendTextTo(replyRecipient, PROCESSING_ACK_MESSAGE);
+		if (result.status() == WhatsAppSendStatus.SENT) {
+			log.info("WhatsApp processing ack sent instance={} remoteType={}", instance, jidType(replyRecipient));
+			return;
+		}
+		log.warn("WhatsApp processing ack was not sent instance={} remoteType={} status={} detail={}",
+				instance, jidType(replyRecipient), result.status(), result.detail());
 	}
 
 	private static String extractText(JsonNode message) {
