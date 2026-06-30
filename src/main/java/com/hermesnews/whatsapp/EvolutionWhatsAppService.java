@@ -19,13 +19,21 @@ public class EvolutionWhatsAppService implements WhatsAppService {
 
 	@Override
 	public WhatsAppSendResult sendText(String message) {
+		return sendTextTo(properties.recipient(), message);
+	}
+
+	@Override
+	public WhatsAppSendResult sendTextTo(String recipient, String message) {
 		if (message == null || message.isBlank()) {
 			return WhatsAppSendResult.skipped("message is empty");
 		}
-		if (!properties.isComplete()) {
+		if (recipient == null || recipient.isBlank()) {
+			return WhatsAppSendResult.skipped("recipient is empty");
+		}
+		if (!properties.hasBaseConfiguration()) {
 			log.info("Skipping WhatsApp send because Evolution API configuration is incomplete");
 			return WhatsAppSendResult.skipped("Evolution API configuration is incomplete");
 		}
-		return client.sendText(properties, message);
+		return client.sendText(properties.withRecipient(recipient), message);
 	}
 }

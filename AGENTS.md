@@ -6,9 +6,10 @@
 
 - `news`: RSS and Hacker News collectors, article entities and repositories.
 - `ranking`: keyword scoring for technology themes.
-- `ai`: summary abstraction with a mock implementation.
+- `ai`: Spring AI/Ollama summary abstraction with mock fallback for tests.
+- `agent`: conversational WhatsApp agent that interprets free-form requests and selects safe internal actions.
 - `digest`: daily digest orchestration and manual API endpoint.
-- `whatsapp`: Evolution API sender and webhook handling.
+- `whatsapp`: Evolution API sender and webhook handling; inbound text messages are routed to `agent`.
 - `scheduler`: daily 08:00 `America/Sao_Paulo` job.
 
 Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/main/resources/db/migration`. Postman artifacts live in `postman/` and local automation scripts live in `scripts/`.
@@ -18,7 +19,8 @@ Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/mai
 - `./gradlew clean build`: compile, test and package the app.
 - `./gradlew test`: run the full JUnit 5 suite.
 - `./gradlew bootRun`: run locally using the default `local` profile.
-- `docker compose up -d`: start PostgreSQL, Redis, Evolution API and the app.
+- `docker compose up -d`: start PostgreSQL, Redis, Ollama, Evolution API and the app.
+- `docker compose exec ollama ollama pull qwen3`: download the local LLM model used by Spring AI.
 - `./scripts/run-postman-local.sh`: run the Postman collection only when `newman` is already installed; do not auto-install npm packages.
 
 Use Gradle only. Do not add Maven or `pom.xml`.
@@ -33,7 +35,7 @@ Follow red-green-refactor for every change. Write or update the failing test fir
 
 ## Testing Guidelines
 
-Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile uses H2 in PostgreSQL mode with Flyway enabled. Do not require live RSS, Hacker News, LLM or Evolution API access during tests; mock external boundaries.
+Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile uses H2 in PostgreSQL mode with Flyway enabled and `AI_PROVIDER=mock`. Do not require live RSS, Hacker News, Ollama, LLM or Evolution API access during tests; mock external boundaries.
 
 ## Postman Guidelines
 
@@ -41,4 +43,4 @@ Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.loca
 
 ## Security & Configuration
 
-Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation.
+Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI; keep prompts defensive because article content and WhatsApp messages are untrusted input.

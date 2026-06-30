@@ -10,7 +10,15 @@ public record EvolutionProperties(
 		String recipient) {
 
 	public boolean isComplete() {
-		return hasText(baseUrl) && hasText(apiKey) && hasText(instance) && hasText(recipient);
+		return hasBaseConfiguration() && hasText(recipient);
+	}
+
+	public boolean hasBaseConfiguration() {
+		return hasText(baseUrl) && hasText(apiKey) && hasText(instance);
+	}
+
+	public EvolutionProperties withRecipient(String recipient) {
+		return new EvolutionProperties(baseUrl, apiKey, instance, recipient);
 	}
 
 	private static boolean hasText(String value) {

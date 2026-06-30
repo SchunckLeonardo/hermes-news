@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b77cb705-ad8d-4e84-ad04-73f808170423",
     "name": "Hermes News",
-    "description": "Local smoke tests for Hermes News and the local Evolution API container.",
+    "description": "Local smoke tests for Hermes News, the conversational webhook and the local Evolution API container.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -75,7 +75,7 @@
           ]
         },
         {
-          "name": "Receive WhatsApp Webhook",
+          "name": "Receive WhatsApp Webhook (Record Only)",
           "request": {
             "method": "POST",
             "header": [
@@ -86,7 +86,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"requestId\": \"{{request_guid}}\",\n  \"timestamp\": \"{{request_timestamp}}\",\n  \"createdAt\": \"{{request_iso_timestamp}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"5511999999999@s.whatsapp.net\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"Postman webhook smoke {{$randomInt}}\"\n    }\n  }\n}"
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"requestId\": \"{{request_guid}}\",\n  \"timestamp\": \"{{request_timestamp}}\",\n  \"createdAt\": \"{{request_iso_timestamp}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"5511999999999@s.whatsapp.net\",\n      \"fromMe\": true\n    },\n    \"message\": {\n      \"conversation\": \"Postman webhook smoke {{$randomInt}}\"\n    }\n  }\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/whatsapp/webhook",

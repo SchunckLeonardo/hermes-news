@@ -25,6 +25,13 @@ services:
       timeout: 5s
       retries: 5
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
   app:
     build: .
     environment:
@@ -32,6 +39,10 @@ services:
       POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hermes_news}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.2}
       EVOLUTION_BASE_URL: http://evolution-api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-change-me-local-only}
       EVOLUTION_INSTANCE: ${EVOLUTION_INSTANCE:-hermes-local}
@@ -44,6 +55,8 @@ services:
       redis:
         condition: service_healthy
       evolution-api:
+        condition: service_started
+      ollama:
         condition: service_started
 
   evolution-postgres:
@@ -107,5 +120,6 @@ services:
 
 volumes:
   postgres-data:
+  ollama-data:
   evolution-postgres-data:
   evolution-instances:

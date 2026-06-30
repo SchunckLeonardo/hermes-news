@@ -2,9 +2,11 @@ package com.hermesnews.ai;
 
 import com.hermesnews.ranking.RankedArticle;
 import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(prefix = "app.ai", name = "provider", havingValue = "mock", matchIfMissing = true)
 public class MockAiSummaryService implements AiSummaryService {
 
 	private static final int MAX_ITEMS = 10;

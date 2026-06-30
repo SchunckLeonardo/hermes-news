@@ -1,6 +1,6 @@
 # hermes-news
 
-Personal technology news assistant built with Java 21 and Spring Boot. It collects technology, AI, backend and cloud news from RSS and Hacker News, ranks items by configured interests, creates a mock AI summary, and sends the digest through Evolution API when WhatsApp credentials are configured.
+Personal technology news assistant built with Java 21 and Spring Boot. It collects technology, AI, backend and cloud news from RSS and Hacker News, ranks items by configured interests, summarizes with Spring AI and local Ollama/qwen3, and sends the digest through Evolution API when WhatsApp is configured.
 
 ## Architecture
 
@@ -8,12 +8,13 @@ This is a modular monolith under `com.hermesnews`:
 
 - `news`: RSS parser/collector, Hacker News client, articles and sources.
 - `ranking`: keyword-based scoring.
-- `ai`: summary abstraction, currently mocked for low-cost local use.
+- `ai`: Spring AI abstraction for Ollama/qwen3 with a mock fallback in tests.
+- `agent`: WhatsApp conversational agent that chooses safe internal actions.
 - `digest`: orchestration and `POST /api/digests/send-daily`.
-- `whatsapp`: Evolution API send client and `POST /api/whatsapp/webhook`.
+- `whatsapp`: Evolution API send client and `POST /api/whatsapp/webhook`; inbound text is sent to the agent.
 - `scheduler`: daily digest at 08:00 in `America/Sao_Paulo`.
 
-Data is stored in PostgreSQL with Flyway migrations. Redis is available for caching/queueing and is also used by the local Evolution API container.
+Data is stored in PostgreSQL with Flyway migrations. Redis is available for caching/queueing and is also used by the local Evolution API container. Ollama runs locally through Docker Compose for low-cost LLM use.
 
 ## Running Locally
 
@@ -27,6 +28,12 @@ Start infrastructure, Evolution API and the app:
 
 ```bash
 docker compose up -d
+```
+
+Pull the local model before expecting real AI summaries:
+
+```bash
+docker compose exec ollama ollama pull qwen3
 ```
 
 Run from the host instead:
@@ -62,6 +69,7 @@ Key variables are documented in `.env.example`:
 
 - `POSTGRES_JDBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 - `REDIS_HOST`, `REDIS_PORT`
+- `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`
 - `RSS_FEEDS`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
 - `RANKING_KEYWORDS`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
@@ -69,6 +77,18 @@ Key variables are documented in `.env.example`:
 - `APP_DAILY_DIGEST_CRON`, `APP_SCHEDULER_ZONE`
 
 Do not commit real credentials.
+
+## Local AI with Ollama
+
+The local profile defaults to:
+
+```text
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3
+```
+
+When the app runs inside Docker Compose, it talks to Ollama through `http://ollama:11434`. If Ollama or `qwen3` is unavailable, the digest falls back to the local formatter instead of failing the whole flow.
 
 ## Evolution API
 
@@ -115,6 +135,8 @@ Import these files into Postman:
 
 The collection includes health, manual digest, webhook, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
 
+The default webhook request uses `fromMe: true` so it only records the event and does not trigger an agent reply to a fake number. To test the conversational agent through Postman, set `fromMe` to `false` and use a real `remoteJid`.
+
 Run the collection directly in Postman with the `Hermes News Local` environment selected.
 
 If you already have Newman installed, you can also run:
@@ -135,7 +157,8 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 
 ## Next Steps
 
-- Replace `MockAiSummaryService` with an OpenAI or alternative LLM adapter.
 - Add richer RSS source management in the database.
 - Add duplicate detection beyond URL matching.
+- Add persisted personal preferences for agent-driven topics, sources and schedule changes.
+- Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
 - Use Redis for digest job locking or cache if the app grows.
