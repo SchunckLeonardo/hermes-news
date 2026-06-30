@@ -106,9 +106,10 @@ Local defaults are safe placeholders:
 EVOLUTION_API_KEY=change-me-local-only
 EVOLUTION_INSTANCE=hermes-local
 EVOLUTION_RECIPIENT=
+EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook
 ```
 
-Keep `EVOLUTION_RECIPIENT` empty until you want to send a real WhatsApp message. Without a recipient, Hermes News skips WhatsApp sending safely and the digest endpoint still works.
+Keep `EVOLUTION_RECIPIENT` empty until you want the scheduled/manual digest to send to a fixed phone number. Replies to inbound WhatsApp messages do not use `EVOLUTION_RECIPIENT`; they use the sender from the Evolution webhook.
 
 The sender posts to:
 
@@ -124,7 +125,31 @@ To connect WhatsApp locally, open:
 http://localhost:8081/manager/
 ```
 
-Use the local API key `change-me-local-only` if prompted, create or select the `hermes-local` instance, then scan the QR code. Docker Compose overrides Evolution's bundled WhatsApp Web version with `EVOLUTION_SESSION_PHONE_VERSION=` so Evolution can resolve a current Baileys version; leave this empty unless you intentionally need to pin a version.
+Use the local API key `change-me-local-only` if prompted, create or select the `hermes-local` instance, then scan the QR code with the WhatsApp account that should behave as Hermes News. Docker Compose overrides Evolution's bundled WhatsApp Web version with `EVOLUTION_SESSION_PHONE_VERSION=` so Evolution can resolve a current Baileys version; leave this empty unless you intentionally need to pin a version.
+
+After the instance exists, configure its webhook:
+
+```bash
+./scripts/configure-evolution-webhook.sh
+```
+
+The default webhook URL is from the Evolution container to the app container:
+
+```text
+http://app:8080/api/whatsapp/webhook
+```
+
+If you run the app from IntelliJ or `./gradlew bootRun` on the host while Evolution stays in Docker, configure the instance with the host URL instead:
+
+```bash
+EVOLUTION_WEBHOOK_URL=http://host.docker.internal:8080/api/whatsapp/webhook ./scripts/configure-evolution-webhook.sh
+```
+
+To confirm delivery, send a WhatsApp message to the connected number and watch:
+
+```bash
+docker compose logs -f app evolution-api
+```
 
 ## Postman
 

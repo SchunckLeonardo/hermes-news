@@ -30,6 +30,7 @@ class WhatsAppWebhookServiceTest {
 	void sendsInboundTextMessageToAgentAndRepliesToSender() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(agentService.handleIncomingText("me manda noticias de IA")).thenReturn("Vou enviar o digest.");
+		when(whatsAppService.sendTextTo("5511999999999", "Vou enviar o digest.")).thenReturn(WhatsAppSendResult.sent());
 		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
 
 		service.record(objectMapper.readTree("""
@@ -53,6 +54,34 @@ class WhatsAppWebhookServiceTest {
 	}
 
 	@Test
+	void preservesLidRemoteJidWhenReplyingToInboundText() throws Exception {
+		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(agentService.handleIncomingText("quais sao as noticias de hoje?")).thenReturn("Aqui esta o resumo.");
+		when(whatsAppService.sendTextTo("24155080654903@lid", "Aqui esta o resumo."))
+				.thenReturn(WhatsAppSendResult.sent());
+		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+
+		service.record(objectMapper.readTree("""
+				{
+				  "event": "messages.upsert",
+				  "instance": "hermes-local",
+				  "data": {
+				    "key": {
+				      "remoteJid": "24155080654903@lid",
+				      "fromMe": false
+				    },
+				    "message": {
+				      "conversation": "quais sao as noticias de hoje?"
+				    }
+				  }
+				}
+				"""));
+
+		verify(agentService).handleIncomingText("quais sao as noticias de hoje?");
+		verify(whatsAppService).sendTextTo("24155080654903@lid", "Aqui esta o resumo.");
+	}
+
+	@Test
 	void ignoresMessagesSentByTheConnectedAccount() throws Exception {
 		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
@@ -67,6 +96,29 @@ class WhatsAppWebhookServiceTest {
 				    },
 				    "message": {
 				      "conversation": "loop"
+				    }
+				  }
+				}
+				"""));
+
+		verifyNoInteractions(agentService, whatsAppService);
+	}
+
+	@Test
+	void ignoresGroupMessages() throws Exception {
+		when(repository.save(any(WhatsAppWebhookEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		var service = new WhatsAppWebhookService(repository, objectMapper, agentService, whatsAppService);
+
+		service.record(objectMapper.readTree("""
+				{
+				  "event": "messages.upsert",
+				  "data": {
+				    "key": {
+				      "remoteJid": "120363427566272026@g.us",
+				      "fromMe": false
+				    },
+				    "message": {
+				      "conversation": "me responda no grupo"
 				    }
 				  }
 				}

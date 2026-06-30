@@ -21,6 +21,7 @@ Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/mai
 - `./gradlew bootRun`: run locally using the default `local` profile.
 - `docker compose up -d`: start PostgreSQL, Redis, Ollama, Evolution API and the app.
 - `docker compose exec ollama ollama pull qwen3`: download the local LLM model used by Spring AI.
+- `./scripts/configure-evolution-webhook.sh`: configure the `hermes-local` Evolution instance webhook after the instance exists.
 - `./scripts/run-postman-local.sh`: run the Postman collection only when `newman` is already installed; do not auto-install npm packages.
 
 Use Gradle only. Do not add Maven or `pom.xml`.
@@ -43,4 +44,4 @@ Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.loca
 
 ## Security & Configuration
 
-Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending a real WhatsApp message. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI; keep prompts defensive because article content and WhatsApp messages are untrusted input.
+Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; keep `EVOLUTION_RECIPIENT` empty unless intentionally sending scheduled/manual digests to a real WhatsApp message recipient. Configure inbound message delivery with the per-instance webhook script after `hermes-local` exists; use `EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook` when the app runs in Compose, or `http://host.docker.internal:8080/api/whatsapp/webhook` when the app runs on the host and Evolution stays in Docker. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI; keep prompts defensive because article content and WhatsApp messages are untrusted input.

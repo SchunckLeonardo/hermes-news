@@ -4,10 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hermesnews.agent.AgentService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class WhatsAppWebhookService {
+
+	private static final Logger log = LoggerFactory.getLogger(WhatsAppWebhookService.class);
 
 	private final WhatsAppWebhookEventRepository repository;
 	private final ObjectMapper objectMapper;
@@ -35,17 +39,39 @@ public class WhatsAppWebhookService {
 
 	private void handleInboundText(JsonNode payload) {
 		var data = payload.path("data");
-		if (data.path("key").path("fromMe").asBoolean(false)) {
+		var key = data.path("key");
+		var event = payload.path("event").asText("unknown");
+		var instance = payload.path("instance").asText("unknown");
+		var remoteJid = key.path("remoteJid").asText("");
+		if (key.path("fromMe").asBoolean(false)) {
+			log.debug("Ignoring WhatsApp webhook event={} instance={} because message is from the connected account",
+					event, instance);
 			return;
 		}
 		var text = extractText(data.path("message"));
-		var recipient = toRecipient(data.path("key").path("remoteJid").asText(""));
-		if (!hasText(text) || !hasText(recipient)) {
+		var recipient = toRecipient(remoteJid);
+		if (!hasText(text)) {
+			log.debug("Ignoring WhatsApp webhook event={} instance={} remoteType={} because text is empty",
+					event, instance, jidType(remoteJid));
 			return;
 		}
+		if (!hasText(recipient)) {
+			log.debug("Ignoring WhatsApp webhook event={} instance={} remoteType={} because recipient is unsupported",
+					event, instance, jidType(remoteJid));
+			return;
+		}
+		log.info("Handling WhatsApp inbound text event={} instance={} remoteType={} textLength={}",
+				event, instance, jidType(remoteJid), text.length());
 		var response = agentService.handleIncomingText(text);
 		if (hasText(response)) {
-			whatsAppService.sendTextTo(recipient, response);
+			var result = whatsAppService.sendTextTo(recipient, response);
+			if (result.status() == WhatsAppSendStatus.SENT) {
+				log.info("WhatsApp reply sent instance={} remoteType={}", instance, jidType(recipient));
+			}
+			else {
+				log.warn("WhatsApp reply was not sent instance={} remoteType={} status={} detail={}",
+						instance, jidType(recipient), result.status(), result.detail());
+			}
 		}
 	}
 
@@ -70,6 +96,12 @@ public class WhatsAppWebhookService {
 			return "";
 		}
 		var value = remoteJid.trim();
+		if (value.endsWith("@g.us") || value.endsWith("@broadcast") || value.endsWith("@newsletter")) {
+			return "";
+		}
+		if (value.endsWith("@lid")) {
+			return value;
+		}
 		var atIndex = value.indexOf('@');
 		if (atIndex >= 0) {
 			value = value.substring(0, atIndex);
@@ -79,6 +111,18 @@ public class WhatsAppWebhookService {
 			value = value.substring(0, deviceIndex);
 		}
 		return value;
+	}
+
+	private static String jidType(String remoteJid) {
+		if (!hasText(remoteJid)) {
+			return "empty";
+		}
+		var value = remoteJid.trim();
+		var atIndex = value.lastIndexOf('@');
+		if (atIndex < 0 || atIndex == value.length() - 1) {
+			return "number";
+		}
+		return value.substring(atIndex + 1);
 	}
 
 	private String toJson(JsonNode payload) {
