@@ -1,7 +1,13 @@
 package com.hermesnews.agent;
 
 import com.hermesnews.digest.DailyDigestService;
+import com.hermesnews.news.NewsSourceService;
 import com.hermesnews.preferences.PreferenceService;
+import com.hermesnews.preferences.PreferenceUpdateRequest;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -22,14 +28,17 @@ public class AgentService {
 	private final AgentInterpreter interpreter;
 	private final DailyDigestService dailyDigestService;
 	private final PreferenceService preferenceService;
+	private final NewsSourceService newsSourceService;
 
 	public AgentService(
 			AgentInterpreter interpreter,
 			DailyDigestService dailyDigestService,
-			PreferenceService preferenceService) {
+			PreferenceService preferenceService,
+			NewsSourceService newsSourceService) {
 		this.interpreter = interpreter;
 		this.dailyDigestService = dailyDigestService;
 		this.preferenceService = preferenceService;
+		this.newsSourceService = newsSourceService;
 	}
 
 	public String handleIncomingText(String message) {
@@ -39,6 +48,21 @@ public class AgentService {
 		var normalizedMessage = message.trim();
 		if (asksAboutAgent(normalizedMessage)) {
 			return CAPABILITIES_MESSAGE;
+		}
+		if (asksForPreferences(normalizedMessage)) {
+			return currentPreferencesMessage();
+		}
+		var sourceResponse = handleSourceCommand(normalizedMessage);
+		if (hasText(sourceResponse)) {
+			return sourceResponse;
+		}
+		if (asksForDigest(normalizedMessage)) {
+			return sendDailyDigest("");
+		}
+		var preferenceUpdate = parsePreferenceUpdate(normalizedMessage);
+		if (preferenceUpdate != null) {
+			preferenceService.update(preferenceUpdate);
+			return "Preferencias atualizadas.";
 		}
 		var decision = interpreter.interpret(normalizedMessage);
 		if (decision.action() == AgentAction.SEND_DAILY_DIGEST) {
@@ -51,6 +75,81 @@ public class AgentService {
 			return CAPABILITIES_MESSAGE;
 		}
 		return hasText(decision.response()) ? decision.response().trim() : "Como posso ajudar com suas noticias de tecnologia?";
+	}
+
+	private String currentPreferencesMessage() {
+		var preferences = preferenceService.current();
+		var activeSources = newsSourceService.enabledRssUrls();
+		return """
+				Suas preferencias atuais:
+				- Temas: %s
+				- Menos prioridade: %s
+				- Fontes priorizadas: %s
+				- Fontes RSS ativas: %s
+				- Quantidade: %d noticias
+				- Horario: %s
+				- Idioma: %s
+				""".formatted(
+				formatList(preferences.themes()),
+				formatList(preferences.excludedThemes()),
+				formatList(preferences.sources()),
+				formatList(activeSources),
+				preferences.newsLimit(),
+				preferences.digestTime(),
+				preferences.language()).trim();
+	}
+
+	private String handleSourceCommand(String message) {
+		var url = firstUrl(message);
+		if (!hasText(url) || !containsAny(normalize(message), "fonte", "rss", "feed")) {
+			return "";
+		}
+		try {
+			if (containsAny(normalize(message), "desative", "desativar", "remova", "remover")) {
+				var source = newsSourceService.disableSource(url);
+				return "Fonte RSS desativada: " + source.getUrl();
+			}
+			if (containsAny(normalize(message), "ative", "ativar", "reative", "reativar")) {
+				var source = newsSourceService.enableSource(url);
+				return "Fonte RSS ativada: " + source.getUrl();
+			}
+			var source = newsSourceService.addRssSource(url);
+			return "Fonte RSS adicionada: " + source.getUrl();
+		}
+		catch (IllegalArgumentException exception) {
+			return "Nao consegui salvar essa fonte. Envie uma URL publica http ou https de RSS.";
+		}
+	}
+
+	private static PreferenceUpdateRequest parsePreferenceUpdate(String message) {
+		var normalized = normalize(message);
+		var addThemes = new ArrayList<String>();
+		var removeThemes = new ArrayList<String>();
+		var preferredSources = new ArrayList<String>();
+
+		var moreIndex = normalized.indexOf("mais noticias de ");
+		if (moreIndex >= 0) {
+			addThemes.addAll(splitTerms(sectionAfter(normalized, moreIndex + "mais noticias de ".length())));
+		}
+		var lessIndex = normalized.indexOf("menos ");
+		if (lessIndex >= 0) {
+			removeThemes.addAll(splitTerms(sectionAfter(normalized, lessIndex + "menos ".length())));
+		}
+		var prioritizeIndex = normalized.indexOf("priorize ");
+		if (prioritizeIndex >= 0) {
+			preferredSources.addAll(splitTerms(sectionAfter(normalized, prioritizeIndex + "priorize ".length())));
+		}
+		var newsLimit = firstIntegerBeforeWord(normalized, "noticias");
+		var digestTime = firstTime(normalized);
+		var language = normalized.contains("ingles") || normalized.contains("english")
+				? "en"
+				: normalized.contains("portugues") || normalized.contains("pt-br") ? "pt-BR" : null;
+
+		if (addThemes.isEmpty() && removeThemes.isEmpty() && preferredSources.isEmpty()
+				&& newsLimit == null && digestTime == null && language == null) {
+			return null;
+		}
+		return new PreferenceUpdateRequest(addThemes, removeThemes, preferredSources, newsLimit, digestTime, language);
 	}
 
 	private String updatePreferences(AgentDecision decision) {
@@ -90,6 +189,110 @@ public class AgentService {
 				|| normalized.contains("voce consegue fazer");
 	}
 
+	private static boolean asksForPreferences(String message) {
+		var normalized = normalize(message);
+		return normalized.contains("minhas preferencias")
+				|| normalized.contains("preferencias atuais")
+				|| normalized.contains("quais sao minhas preferencias")
+				|| normalized.contains("mostrar preferencias");
+	}
+
+	private static boolean asksForDigest(String message) {
+		var normalized = normalize(message);
+		return normalized.contains("me envia o digest")
+				|| normalized.contains("me envie o digest")
+				|| normalized.contains("me envia as noticias")
+				|| normalized.contains("me envie as noticias")
+				|| normalized.contains("me manda as noticias")
+				|| normalized.contains("me mande as noticias")
+				|| normalized.contains("mande o digest")
+				|| normalized.contains("enviar digest")
+				|| normalized.contains("noticias de hoje")
+				|| normalized.contains("resumo de hoje");
+	}
+
+	private static String firstUrl(String message) {
+		for (String token : message.split("\\s+")) {
+			var cleaned = token.strip().replaceAll("[),.;]+$", "");
+			if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+				return cleaned;
+			}
+		}
+		return "";
+	}
+
+	private static boolean containsAny(String value, String... candidates) {
+		for (String candidate : candidates) {
+			if (value.contains(candidate)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static String formatList(List<String> values) {
+		return values == null || values.isEmpty() ? "nenhuma" : String.join(", ", values);
+	}
+
+	private static String sectionAfter(String value, int start) {
+		var section = value.substring(start);
+		for (String delimiter : List.of(" e menos ", ",", ".", ";")) {
+			var index = section.indexOf(delimiter);
+			if (index >= 0) {
+				section = section.substring(0, index);
+			}
+		}
+		return section.trim();
+	}
+
+	private static List<String> splitTerms(String value) {
+		if (!hasText(value)) {
+			return List.of();
+		}
+		var terms = new ArrayList<String>();
+		for (String item : value.split("\\s+e\\s+|,|/")) {
+			var normalized = normalize(item)
+					.replace("noticias", "")
+					.replace("por dia", "")
+					.trim();
+			if (hasText(normalized) && !terms.contains(normalized)) {
+				terms.add(normalized);
+			}
+		}
+		return List.copyOf(terms);
+	}
+
+	private static Integer firstIntegerBeforeWord(String value, String word) {
+		var tokens = value.split("\\s+");
+		for (int index = 0; index < tokens.length - 1; index++) {
+			if (!tokens[index + 1].startsWith(word)) {
+				continue;
+			}
+			try {
+				return Integer.parseInt(tokens[index]);
+			}
+			catch (NumberFormatException ignored) {
+				continue;
+			}
+		}
+		return null;
+	}
+
+	private static LocalTime firstTime(String value) {
+		for (String token : value.split("\\s+")) {
+			if (!token.matches("\\d{1,2}:\\d{2}")) {
+				continue;
+			}
+			try {
+				return LocalTime.parse(token.length() == 4 ? "0" + token : token);
+			}
+			catch (DateTimeParseException ignored) {
+				return null;
+			}
+		}
+		return null;
+	}
+
 	private static String normalize(String value) {
 		return value == null
 				? ""
@@ -98,6 +301,8 @@ public class AgentService {
 						.replace("ê", "e")
 						.replace("á", "a")
 						.replace("ã", "a")
+						.replace("í", "i")
+						.replace("ó", "o")
 						.replace("ç", "c")
 						.replace("?", "")
 						.trim();

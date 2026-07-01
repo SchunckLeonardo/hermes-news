@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.hermesnews.ai.AiSummaryService;
@@ -130,5 +131,37 @@ class DailyDigestServiceTest {
 		verify(aiSummaryService).summarize(captor.capture());
 		assertThat(captor.getValue()).hasSize(1);
 		assertThat(captor.getValue().getFirst()).isInstanceOf(RankedArticle.class);
+	}
+
+	@Test
+	void skipsArticlesAlreadyPersistedInHistory() {
+		when(preferenceService.current()).thenReturn(PersonalPreference.defaults());
+		var repeated = new CollectedArticle(
+				"rss",
+				"article-1",
+				"AI for Java backend teams",
+				"https://example.com/already-sent",
+				"Cloud backend summary",
+				Instant.parse("2026-06-29T08:00:00Z"));
+		when(collector.collect()).thenReturn(List.of(repeated));
+		when(articleRepository.existsByUrl(repeated.url())).thenReturn(true);
+		when(digestRepository.save(any(Digest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(aiSummaryService.summarize(anyList())).thenReturn("no fresh news");
+		when(whatsAppService.sendText("no fresh news")).thenReturn(WhatsAppSendResult.sent());
+		var service = new DailyDigestService(
+				List.of(collector),
+				articleRepository,
+				digestRepository,
+				digestItemRepository,
+				new RankingService(new RankingProperties(List.of("ai", "java", "backend", "cloud"))),
+				aiSummaryService,
+				whatsAppService,
+				preferenceService);
+
+		var result = service.sendDailyDigest();
+
+		assertThat(result.articleCount()).isZero();
+		verify(articleRepository, never()).save(any(Article.class));
+		verify(digestItemRepository, never()).save(any(DigestItem.class));
 	}
 }

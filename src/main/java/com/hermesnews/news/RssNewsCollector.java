@@ -2,6 +2,7 @@ package com.hermesnews.news;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,16 +18,22 @@ public class RssNewsCollector implements NewsCollector {
 	private final WebClient webClient;
 	private final RssFeedParser parser;
 	private final RssProperties properties;
+	private final NewsSourceService newsSourceService;
 
-	public RssNewsCollector(WebClient.Builder builder, RssFeedParser parser, RssProperties properties) {
+	public RssNewsCollector(
+			WebClient.Builder builder,
+			RssFeedParser parser,
+			RssProperties properties,
+			NewsSourceService newsSourceService) {
 		this.webClient = builder.build();
 		this.parser = parser;
 		this.properties = properties;
+		this.newsSourceService = newsSourceService;
 	}
 
 	@Override
 	public List<CollectedArticle> collect() {
-		var feeds = properties.feeds() == null ? List.<String>of() : properties.feeds();
+		var feeds = feedsToCollect();
 		var articles = new ArrayList<CollectedArticle>();
 		for (String feed : feeds) {
 			if (feed == null || feed.isBlank()) {
@@ -47,5 +54,21 @@ public class RssNewsCollector implements NewsCollector {
 			}
 		}
 		return articles;
+	}
+
+	List<String> feedsToCollect() {
+		var feeds = new LinkedHashSet<String>();
+		var configuredFeeds = properties.feeds() == null ? List.<String>of() : properties.feeds();
+		for (String feed : configuredFeeds) {
+			if (feed != null && !feed.isBlank()) {
+				feeds.add(feed.trim());
+			}
+		}
+		for (String feed : newsSourceService.enabledRssUrls()) {
+			if (feed != null && !feed.isBlank()) {
+				feeds.add(feed.trim());
+			}
+		}
+		return List.copyOf(feeds);
 	}
 }

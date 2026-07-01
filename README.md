@@ -6,14 +6,14 @@ Personal technology news assistant built with Java 21 and Spring Boot. It collec
 
 This is a modular monolith under `com.hermesnews`:
 
-- `news`: RSS parser/collector, Hacker News client, articles and sources.
+- `news`: RSS parser/collector, Hacker News client, articles and managed RSS sources.
 - `ranking`: keyword-based scoring.
 - `preferences`: persisted personal preferences for themes, sources, news count, preferred time and language.
-- `ai`: Spring AI abstraction for Ollama/qwen3 with a mock fallback in tests.
-- `agent`: WhatsApp conversational agent that chooses safe internal actions.
+- `ai`: Spring AI abstraction for Ollama/qwen3 with timeout and local formatter fallback.
+- `agent`: WhatsApp conversational agent with deterministic handling for core commands before using AI.
 - `digest`: orchestration and `POST /api/digests/send-daily`.
 - `whatsapp`: Evolution API send client and `POST /api/whatsapp/webhook`; inbound text is sent to the agent.
-- `scheduler`: daily digest at 08:00 in `America/Sao_Paulo`.
+- `scheduler`: checks every minute and sends the daily digest once when the saved preferred time matches.
 
 Data is stored in PostgreSQL with Flyway migrations. Redis is available for caching/queueing and is also used by the local Evolution API container. Ollama runs locally through Docker Compose for low-cost LLM use.
 
@@ -70,12 +70,12 @@ Key variables are documented in `.env.example`:
 
 - `POSTGRES_JDBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 - `REDIS_HOST`, `REDIS_PORT`
-- `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`
+- `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`, `AI_SUMMARY_TIMEOUT`
 - `RSS_FEEDS`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
 - `RANKING_KEYWORDS`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
 - `EVOLUTION_SERVER_URL`, `EVOLUTION_POSTGRES_DB`, `EVOLUTION_POSTGRES_USER`, `EVOLUTION_POSTGRES_PASSWORD`
-- `APP_DAILY_DIGEST_CRON`, `APP_SCHEDULER_ZONE`
+- `APP_DIGEST_CHECK_CRON`, `APP_SCHEDULER_ZONE`
 
 Do not commit real credentials.
 
@@ -89,7 +89,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3
 ```
 
-When the app runs inside Docker Compose, it talks to Ollama through `http://ollama:11434`. If Ollama or `qwen3` is unavailable, the digest falls back to the local formatter instead of failing the whole flow.
+When the app runs inside Docker Compose, it talks to Ollama through `http://ollama:11434`. If Ollama or `qwen3` is unavailable or slower than `AI_SUMMARY_TIMEOUT`, the digest falls back to the local formatter instead of failing the whole flow.
 
 ## Evolution API
 
@@ -160,7 +160,9 @@ The agent currently supports only these actions:
 - Generate and send the daily technology digest.
 - Answer direct questions about what the agent can do.
 - Update personal preferences for themes, sources, news count, preferred time and language.
-- Use saved themes, excluded themes, preferred sources and news count in ranking/digest generation.
+- Show saved preferences without calling the LLM.
+- Add, enable and disable public RSS source URLs.
+- Use saved themes, excluded themes, preferred sources, RSS sources, news count and preferred time in ranking/digest generation.
 
 Example preference commands:
 
@@ -168,9 +170,17 @@ Example preference commands:
 quero mais noticias de Java e menos frontend
 quero 7 noticias por dia
 priorize InfoQ e Hacker News
+quais sao minhas preferencias?
+adicione fonte https://news.ycombinator.com/rss
+desative fonte https://example.com/feed
+me envie o digest
 ```
 
-Preferred digest time and language are persisted for future behavior, but the current scheduler still runs from `APP_DAILY_DIGEST_CRON`.
+The scheduler checks every minute by default and sends the digest once per day when the saved preferred time matches `APP_SCHEDULER_ZONE`.
+
+## Digest Format
+
+The digest is formatted for WhatsApp with grouped sections for `IA`, `Java`, `Backend`, `Cloud` and `Outras`. Each item includes title, source, score, summary when available and the original link. URLs already saved in `articles` are skipped so the same article is not sent again.
 
 ## Postman
 
@@ -203,8 +213,7 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 
 ## Next Steps
 
-- Add richer RSS source management in the database.
-- Add duplicate detection beyond URL matching.
-- Apply persisted preferred time directly to the scheduler instead of only storing it.
 - Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
 - Use Redis for digest job locking or cache if the app grows.
+- Add more robust feed health checks and source labels.
+- Add delayed ACK instead of always sending the WhatsApp processing message.

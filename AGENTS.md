@@ -4,14 +4,14 @@
 
 `hermes-news` is a Java 21 Spring Boot 3 modular monolith for a personal technology news assistant. Source code lives under `src/main/java/com/hermesnews` and is grouped by feature:
 
-- `news`: RSS and Hacker News collectors, article entities and repositories.
+- `news`: RSS and Hacker News collectors, managed RSS sources, article entities and repositories.
 - `ranking`: keyword scoring for technology themes.
 - `preferences`: persisted personal preferences for themes, excluded themes, sources, news count, preferred time and language.
-- `ai`: Spring AI/Ollama summary abstraction with mock fallback for tests.
-- `agent`: conversational WhatsApp agent that interprets free-form requests and selects safe internal actions.
+- `ai`: Spring AI/Ollama summary abstraction with timeout and mock/local formatter fallback.
+- `agent`: conversational WhatsApp agent with deterministic handling for capabilities, preferences, digest and RSS source commands before using AI.
 - `digest`: daily digest orchestration and manual API endpoint.
 - `whatsapp`: Evolution API sender and webhook handling; inbound text messages are routed to `agent`.
-- `scheduler`: daily 08:00 `America/Sao_Paulo` job.
+- `scheduler`: minute-level check that sends the daily digest once when the saved preferred time matches `America/Sao_Paulo`.
 
 Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/main/resources/db/migration`. Postman artifacts live in `postman/` and local automation scripts live in `scripts/`.
 
@@ -45,4 +45,4 @@ Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.loca
 
 ## Security & Configuration
 
-Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; `EVOLUTION_RECIPIENT` is the phone-number destination for scheduled/manual digests and replies, while `EVOLUTION_ALLOWED_SENDER` is the optional inbound allowlist for the WhatsApp agent. If Evolution emits inbound senders as `@lid`, use that exact JID in `EVOLUTION_ALLOWED_SENDER`, not in `EVOLUTION_RECIPIENT`. Deduplicate inbound `messages.upsert` events by `data.key.id` before calling the agent, because Evolution can deliver the same message more than once. Authorized inbound WhatsApp text sends a short processing ACK before calling the agent to reduce perceived latency while Ollama/tool calls run. The local `evoapicloud/evolution-api:v2.1.1` `sendText` endpoint expects `number` plus flat `text`; verify the running container logs before changing this payload contract. Configure inbound message delivery with the per-instance webhook script after `hermes-local` exists; use `EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook` when the app runs in Compose, or `http://host.docker.internal:8080/api/whatsapp/webhook` when the app runs on the host and Evolution stays in Docker. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI; keep prompts defensive because article content and WhatsApp messages are untrusted input.
+Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; `EVOLUTION_RECIPIENT` is the phone-number destination for scheduled/manual digests and replies, while `EVOLUTION_ALLOWED_SENDER` is the optional inbound allowlist for the WhatsApp agent. If Evolution emits inbound senders as `@lid`, use that exact JID in `EVOLUTION_ALLOWED_SENDER`, not in `EVOLUTION_RECIPIENT`. Deduplicate inbound `messages.upsert` events by `data.key.id` before calling the agent, because Evolution can deliver the same message more than once. Authorized inbound WhatsApp text sends a short processing ACK before calling the agent to reduce perceived latency while Ollama/tool calls run. RSS source commands must validate public `http`/`https` URLs and reject localhost/private-network targets before persistence. The local `evoapicloud/evolution-api:v2.1.1` `sendText` endpoint expects `number` plus flat `text`; verify the running container logs before changing this payload contract. Configure inbound message delivery with the per-instance webhook script after `hermes-local` exists; use `EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook` when the app runs in Compose, or `http://host.docker.internal:8080/api/whatsapp/webhook` when the app runs on the host and Evolution stays in Docker. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI with `AI_SUMMARY_TIMEOUT`; keep prompts defensive because article content and WhatsApp messages are untrusted input.

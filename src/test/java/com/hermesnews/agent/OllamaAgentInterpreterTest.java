@@ -22,7 +22,9 @@ class OllamaAgentInterpreterTest {
 		assertThat(client.systemPrompt)
 				.contains("SEND_DAILY_DIGEST")
 				.contains("JSON")
-				.contains("segredos");
+				.contains("segredos")
+				.contains("Nao invente")
+				.contains("sem markdown");
 		assertThat(client.userPrompt).contains("me manda as principais noticias de IA de hoje");
 	}
 

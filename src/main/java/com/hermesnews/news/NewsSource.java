@@ -44,6 +44,14 @@ public class NewsSource {
 		this.url = url;
 	}
 
+	public void enable() {
+		this.enabled = true;
+	}
+
+	public void disable() {
+		this.enabled = false;
+	}
+
 	public UUID getId() {
 		return id;
 	}

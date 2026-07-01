@@ -32,8 +32,9 @@ management:
 app:
   ai:
     provider: ${AI_PROVIDER:ollama}
+    summary-timeout: ${AI_SUMMARY_TIMEOUT:20s}
   scheduler:
-    daily-digest-cron: ${APP_DAILY_DIGEST_CRON:0 0 8 * * *}
+    digest-check-cron: ${APP_DIGEST_CHECK_CRON:0 * * * * *}
     zone: ${APP_SCHEDULER_ZONE:America/Sao_Paulo}
   rss:
     feeds: ${RSS_FEEDS:https://www.infoq.com/feed/,https://hnrss.org/frontpage}

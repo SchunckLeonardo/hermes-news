@@ -25,9 +25,38 @@ class MockAiSummaryServiceTest {
 		var digest = service.summarize(List.of(new RankedArticle(article, 8)));
 
 		assertThat(digest)
-				.contains("Daily technology digest")
+				.contains("Hermes News - Digest de tecnologia")
+				.contains("Java")
 				.contains("Java agents for backend teams")
+				.contains("Fonte: hacker-news")
 				.contains("https://example.com/java-agents");
+	}
+
+	@Test
+	void groupsArticlesByTechnologyThemeAndDeduplicatesLinks() {
+		var java = new CollectedArticle(
+				"rss",
+				"java",
+				"Java backend performance",
+				"https://example.com/java",
+				"Spring backend details",
+				Instant.parse("2026-06-29T08:00:00Z"));
+		var ai = new CollectedArticle(
+				"rss",
+				"ai",
+				"AI infrastructure",
+				"https://example.com/ai",
+				"LLM cloud summary",
+				Instant.parse("2026-06-29T08:00:00Z"));
+
+		var digest = new MockAiSummaryService().summarize(List.of(
+				new RankedArticle(java, 9),
+				new RankedArticle(ai, 8),
+				new RankedArticle(java, 7)));
+
+		assertThat(digest).contains("IA", "Java", "Backend", "Cloud");
+		assertThat(digest.indexOf("https://example.com/java"))
+				.isEqualTo(digest.lastIndexOf("https://example.com/java"));
 	}
 
 	@Test
