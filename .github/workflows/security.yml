@@ -4,10 +4,15 @@ on:
   pull_request:
   push:
     branches: ["master", "main"]
+  schedule:
+    - cron: "23 8 * * 1"
+  workflow_dispatch:
 
 jobs:
   codeql:
+    name: CodeQL
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       security-events: write
       packages: read
@@ -16,10 +21,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java-kotlin
+          build-mode: manual
+          config-file: ./.github/codeql/codeql-config.yml
       - name: Set up Java
         uses: actions/setup-java@v4
         with:

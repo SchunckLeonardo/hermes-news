@@ -39,6 +39,10 @@ Follow red-green-refactor for every change. Write or update the failing test fir
 
 Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile uses H2 in PostgreSQL mode with Flyway enabled and `AI_PROVIDER=mock`. Do not require live RSS, Hacker News, Ollama, LLM or Evolution API access during tests; mock external boundaries.
 
+## CI & CodeQL
+
+Use GitHub CodeQL, not SonarQube, for repository code scanning. Keep `.github/workflows/security.yml` configured for Java/Kotlin with a manual Gradle build and `.github/codeql/codeql-config.yml` using `security-extended` plus `security-and-quality`. Do not add SonarQube plugins, workflows or tokens unless explicitly requested.
+
 ## Postman Guidelines
 
 Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.local.postman_environment.json` aligned with every public endpoint. Use Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` for webhook IDs, timestamps and smoke-test payloads. Secret-like environment values must use placeholders and `type: "secret"` where supported. Do not add scripts that install Newman or other npm tools automatically.

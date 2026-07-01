@@ -64,6 +64,16 @@ curl -X POST http://localhost:8080/api/digests/send-daily
 docker compose up -d
 ```
 
+## CI and Security Review
+
+GitHub Actions uses:
+
+- `.github/workflows/ci.yml`: runs `./gradlew clean build` on pushes and pull requests.
+- `.github/workflows/security.yml`: runs GitHub CodeQL for Java/Kotlin and dependency review for pull requests.
+- `.github/codeql/codeql-config.yml`: enables the `security-extended` and `security-and-quality` CodeQL query suites for `src/main/java`.
+
+CodeQL runs with a manual Gradle build so Spring Boot, annotation processing and dependency resolution are analyzed from the compiled project. No external SonarQube token or hosted scanner is required.
+
 ## Environment Variables
 
 Key variables are documented in `.env.example`:
