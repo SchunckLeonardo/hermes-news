@@ -6,7 +6,7 @@ Personal technology news assistant built with Java 21 and Spring Boot. It collec
 
 This is a modular monolith under `com.hermesnews`:
 
-- `news`: RSS parser/collector, Hacker News client, articles and managed RSS sources.
+- `news`: RSS/Atom parser and collector, HTML feed discovery, Hacker News client, articles and managed RSS sources.
 - `ranking`: keyword-based scoring.
 - `preferences`: persisted personal preferences for themes, sources, news count, preferred time and language.
 - `ai`: Spring AI abstraction for Ollama/qwen3 with timeout and local formatter fallback.
@@ -164,6 +164,8 @@ The agent currently supports only these actions:
 - Add, enable and disable public RSS source URLs.
 - Use saved themes, excluded themes, preferred sources, RSS sources, news count and preferred time in ranking/digest generation.
 
+RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them.
+
 Example preference commands:
 
 ```text
@@ -172,6 +174,7 @@ quero 7 noticias por dia
 priorize InfoQ e Hacker News
 quais sao minhas preferencias?
 adicione fonte https://news.ycombinator.com/rss
+adicione fonte https://akitaonrails.com/en/
 desative fonte https://example.com/feed
 me envie o digest
 ```
@@ -215,5 +218,5 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 
 - Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
 - Use Redis for digest job locking or cache if the app grows.
-- Add more robust feed health checks and source labels.
+- Add source labels and per-source health status.
 - Add delayed ACK instead of always sending the WhatsApp processing message.

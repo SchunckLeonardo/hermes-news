@@ -3,6 +3,7 @@ package com.hermesnews.news;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class RssFeedParserTest {
@@ -48,5 +49,31 @@ class RssFeedParserTest {
 
 		assertThatThrownBy(() -> parser.parse("Unsafe Feed", xml))
 				.isInstanceOf(RssParsingException.class);
+	}
+
+	@Test
+	void parsesAtomEntriesIntoCollectedArticles() {
+		var xml = """
+				<?xml version="1.0" encoding="UTF-8"?>
+				<feed xmlns="http://www.w3.org/2005/Atom">
+				  <title>Atom Tech Feed</title>
+				  <entry>
+				    <id>tag:example.com,2026:atom-java</id>
+				    <title>Atom Java post</title>
+				    <link href="https://example.com/atom-java" />
+				    <summary>Atom summary</summary>
+				    <updated>2026-07-01T08:00:00Z</updated>
+				  </entry>
+				</feed>
+				""";
+
+		var articles = parser.parse("Atom Tech Feed", xml);
+
+		assertThat(articles).hasSize(1);
+		assertThat(articles.getFirst().externalId()).isEqualTo("tag:example.com,2026:atom-java");
+		assertThat(articles.getFirst().title()).isEqualTo("Atom Java post");
+		assertThat(articles.getFirst().url()).isEqualTo("https://example.com/atom-java");
+		assertThat(articles.getFirst().summary()).isEqualTo("Atom summary");
+		assertThat(articles.getFirst().publishedAt()).isEqualTo(Instant.parse("2026-07-01T08:00:00Z"));
 	}
 }

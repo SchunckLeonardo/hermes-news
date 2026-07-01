@@ -35,6 +35,19 @@ class NewsSourceServiceTest {
 	}
 
 	@Test
+	void removesTrailingChatPunctuationBeforePersistingSourceUrl() {
+		when(repository.findByUrl("https://akitaonrails.com/en/")).thenReturn(Optional.empty());
+		when(repository.save(any(NewsSource.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		var service = new NewsSourceService(repository);
+
+		var source = service.addRssSource("https://akitaonrails.com/en/:");
+
+		assertThat(source.getUrl()).isEqualTo("https://akitaonrails.com/en/");
+		verify(repository).findByUrl("https://akitaonrails.com/en/");
+		verify(repository).save(any(NewsSource.class));
+	}
+
+	@Test
 	void rejectsLocalOrPrivateUrls() {
 		var service = new NewsSourceService(repository);
 

@@ -116,6 +116,19 @@ class AgentServiceTest {
 	}
 
 	@Test
+	void stripsTrailingColonFromRssSourceUrlBeforeCallingSourceService() {
+		var source = new NewsSource("akitaonrails.com", NewsSourceType.RSS, "https://akitaonrails.com/en/");
+		when(newsSourceService.addRssSource("https://akitaonrails.com/en/")).thenReturn(source);
+		var service = service();
+
+		var response = service.handleIncomingText("adicione fonte https://akitaonrails.com/en/:");
+
+		assertThat(response).isEqualTo("Fonte RSS adicionada: https://akitaonrails.com/en/");
+		verify(newsSourceService).addRssSource("https://akitaonrails.com/en/");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService);
+	}
+
+	@Test
 	void returnsAiResponseWhenNoToolIsNeeded() {
 		when(interpreter.interpret("responda algo simples"))
 				.thenReturn(new AgentDecision(AgentAction.ANSWER, "Resposta direta."));

@@ -29,33 +29,83 @@ public class RssFeedParser {
 
 			var builder = factory.newDocumentBuilder();
 			var document = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
-			var items = document.getElementsByTagName("item");
-			var articles = new ArrayList<CollectedArticle>();
-			for (int index = 0; index < items.getLength(); index++) {
-				var item = items.item(index);
-				if (item.getNodeType() != Node.ELEMENT_NODE) {
-					continue;
-				}
-				var element = (Element) item;
-				var title = text(element, "title");
-				var link = text(element, "link");
-				if (isBlank(title) || isBlank(link)) {
-					continue;
-				}
-				var externalId = firstNonBlank(text(element, "guid"), link);
-				articles.add(new CollectedArticle(
-						sourceName,
-						externalId,
-						title,
-						link,
-						text(element, "description"),
-						parsePublishedAt(text(element, "pubDate"))));
+			var rssArticles = parseRssItems(sourceName, document.getElementsByTagName("item"));
+			if (!rssArticles.isEmpty()) {
+				return rssArticles;
 			}
-			return articles;
+			return parseAtomEntries(sourceName, document.getElementsByTagName("entry"));
 		}
 		catch (Exception exception) {
 			throw new RssParsingException("Could not parse RSS feed", exception);
 		}
+	}
+
+	private static List<CollectedArticle> parseRssItems(String sourceName, NodeList items) {
+		var articles = new ArrayList<CollectedArticle>();
+		for (int index = 0; index < items.getLength(); index++) {
+			var item = items.item(index);
+			if (item.getNodeType() != Node.ELEMENT_NODE) {
+				continue;
+			}
+			var element = (Element) item;
+			var title = text(element, "title");
+			var link = text(element, "link");
+			if (isBlank(title) || isBlank(link)) {
+				continue;
+			}
+			var externalId = firstNonBlank(text(element, "guid"), link);
+			articles.add(new CollectedArticle(
+					sourceName,
+					externalId,
+					title,
+					link,
+					text(element, "description"),
+					parsePublishedAt(text(element, "pubDate"))));
+		}
+		return articles;
+	}
+
+	private static List<CollectedArticle> parseAtomEntries(String sourceName, NodeList entries) {
+		var articles = new ArrayList<CollectedArticle>();
+		for (int index = 0; index < entries.getLength(); index++) {
+			var entry = entries.item(index);
+			if (entry.getNodeType() != Node.ELEMENT_NODE) {
+				continue;
+			}
+			var element = (Element) entry;
+			var title = text(element, "title");
+			var link = atomLink(element);
+			if (isBlank(title) || isBlank(link)) {
+				continue;
+			}
+			var summary = firstNonBlank(text(element, "summary"), text(element, "content"));
+			var publishedAt = firstNonBlank(text(element, "updated"), text(element, "published"));
+			articles.add(new CollectedArticle(
+					sourceName,
+					firstNonBlank(text(element, "id"), link),
+					title,
+					link,
+					summary,
+					parsePublishedAt(publishedAt)));
+		}
+		return articles;
+	}
+
+	private static String atomLink(Element element) {
+		NodeList nodes = element.getElementsByTagName("link");
+		for (int index = 0; index < nodes.getLength(); index++) {
+			var node = nodes.item(index);
+			if (node.getNodeType() != Node.ELEMENT_NODE) {
+				continue;
+			}
+			var link = (Element) node;
+			var rel = link.getAttribute("rel");
+			var href = link.getAttribute("href");
+			if (!isBlank(href) && (isBlank(rel) || rel.equalsIgnoreCase("alternate"))) {
+				return href.trim();
+			}
+		}
+		return text(element, "link");
 	}
 
 	private static String text(Element element, String tagName) {
@@ -74,7 +124,12 @@ public class RssFeedParser {
 			return ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
 		}
 		catch (DateTimeParseException ignored) {
-			return null;
+			try {
+				return Instant.parse(value);
+			}
+			catch (DateTimeParseException ignoredAgain) {
+				return null;
+			}
 		}
 	}
 

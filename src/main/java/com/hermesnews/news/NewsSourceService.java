@@ -55,7 +55,7 @@ public class NewsSourceService {
 
 	static String normalizePublicHttpUrl(String value) {
 		try {
-			var uri = new URI(value == null ? "" : value.trim()).normalize();
+			var uri = new URI(stripTrailingChatPunctuation(value)).normalize();
 			var scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
 			var host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
 			if ((!scheme.equals("http") && !scheme.equals("https")) || host.isBlank() || isLocalOrPrivateHost(host)) {
@@ -66,6 +66,14 @@ public class NewsSourceService {
 		catch (URISyntaxException exception) {
 			throw new IllegalArgumentException("Source URL must be a public http or https URL", exception);
 		}
+	}
+
+	private static String stripTrailingChatPunctuation(String value) {
+		var cleaned = value == null ? "" : value.trim();
+		while (!cleaned.isBlank() && ".,;:)".indexOf(cleaned.charAt(cleaned.length() - 1)) >= 0) {
+			cleaned = cleaned.substring(0, cleaned.length() - 1);
+		}
+		return cleaned;
 	}
 
 	private static boolean isLocalOrPrivateHost(String host) {

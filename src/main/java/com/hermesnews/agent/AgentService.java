@@ -213,7 +213,7 @@ public class AgentService {
 
 	private static String firstUrl(String message) {
 		for (String token : message.split("\\s+")) {
-			var cleaned = token.strip().replaceAll("[),.;]+$", "");
+			var cleaned = token.strip().replaceAll("[),.;:]+$", "");
 			if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
 				return cleaned;
 			}
