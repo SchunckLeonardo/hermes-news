@@ -161,10 +161,33 @@ The agent currently supports only these actions:
 - Answer direct questions about what the agent can do.
 - Update personal preferences for themes, sources, news count, preferred time and language.
 - Show saved preferences without calling the LLM.
-- Add, enable and disable public RSS source URLs.
+- Add, label, list, test, enable and disable public RSS source URLs.
 - Use saved themes, excluded themes, preferred sources, RSS sources, news count and preferred time in ranking/digest generation.
 
-RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them. `RSS_MAX_RESPONSE_SIZE` defaults to `2MB`; increase it only for trusted large feeds/pages.
+RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them. `RSS_MAX_RESPONSE_SIZE` defaults to `2MB`; increase it only for trusted large feeds/pages. Source health is persisted with last success, last error, last error message and consecutive failure count.
+
+Source management endpoints:
+
+```text
+GET  /api/news-sources
+POST /api/news-sources/rss
+POST /api/news-sources/test
+POST /api/news-sources/label
+POST /api/news-sources/enable
+POST /api/news-sources/disable
+```
+
+All `POST /api/news-sources/*` endpoints use a JSON body like:
+
+```json
+{ "url": "https://hnrss.org/frontpage" }
+```
+
+To edit a source label, use:
+
+```json
+{ "url": "https://hnrss.org/frontpage", "name": "Hacker News" }
+```
 
 Example preference commands:
 
@@ -173,8 +196,13 @@ quero mais noticias de Java e menos frontend
 quero 7 noticias por dia
 priorize InfoQ e Hacker News
 quais sao minhas preferencias?
+quais fontes estao ativas?
 adicione fonte https://news.ycombinator.com/rss
 adicione fonte https://akitaonrails.com/en/
+renomeie fonte https://akitaonrails.com/en/ para Akita
+teste a fonte https://hnrss.org/frontpage
+teste Akita
+remova TechCrunch
 desative fonte https://example.com/feed
 me envie o digest
 ```
@@ -192,7 +220,7 @@ Import these files into Postman:
 - `postman/hermes-news.postman_collection.json`
 - `postman/hermes-news.local.postman_environment.json`
 
-The collection includes health, manual digest, webhook, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
+The collection includes health, manual digest, source management, webhook, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
 
 The default webhook request uses `fromMe: true` so it only records the event and does not trigger an agent reply to a fake number. To test the conversational agent through Postman, set `fromMe` to `false` and use a real `remoteJid`.
 
@@ -218,5 +246,5 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 
 - Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
 - Use Redis for digest job locking or cache if the app grows.
-- Add source labels and per-source health status.
+- Add source health summaries to the daily digest when a preferred source keeps failing.
 - Add delayed ACK instead of always sending the WhatsApp processing message.

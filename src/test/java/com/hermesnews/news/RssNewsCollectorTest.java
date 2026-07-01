@@ -1,6 +1,8 @@
 package com.hermesnews.news;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.sun.net.httpserver.HttpServer;
@@ -129,5 +131,82 @@ class RssNewsCollectorTest {
 		var articles = collector.collect();
 
 		assertThat(articles).isEmpty();
+	}
+
+	@Test
+	void recordsSourceHealthSuccessWhenStoredFeedReturnsArticles() {
+		var sourceService = Mockito.mock(NewsSourceService.class);
+		when(sourceService.enabledRssUrls()).thenReturn(List.of("https://source.example/feed"));
+		var rss = """
+				<rss version="2.0">
+				  <channel>
+				    <item>
+				      <guid>source-1</guid>
+				      <title>Healthy source</title>
+				      <link>https://source.example/article</link>
+				    </item>
+				  </channel>
+				</rss>
+				""";
+		var collector = new RssNewsCollector(
+				new RssFeedParser(),
+				new RssProperties(List.of()),
+				sourceService,
+				new RssFeedDiscovery(),
+				url -> rss);
+
+		var articles = collector.collect();
+
+		assertThat(articles).hasSize(1);
+		verify(sourceService).recordCollectionSuccess(Mockito.eq("https://source.example/feed"), Mockito.any());
+	}
+
+	@Test
+	void recordsSourceHealthFailureWhenStoredFeedCannotBeCollected() {
+		var sourceService = Mockito.mock(NewsSourceService.class);
+		when(sourceService.enabledRssUrls()).thenReturn(List.of("https://broken.example/feed"));
+		var collector = new RssNewsCollector(
+				new RssFeedParser(),
+				new RssProperties(List.of()),
+				sourceService,
+				new RssFeedDiscovery(),
+				url -> "<html><body>no feed here</body></html>");
+
+		var articles = collector.collect();
+
+		assertThat(articles).isEmpty();
+		verify(sourceService).recordCollectionFailure(
+				Mockito.eq("https://broken.example/feed"),
+				contains("no RSS/Atom"),
+				Mockito.any());
+	}
+
+	@Test
+	void testsSingleSourceWithoutCollectingAllConfiguredFeeds() {
+		var sourceService = Mockito.mock(NewsSourceService.class);
+		var rss = """
+				<rss version="2.0">
+				  <channel>
+				    <item>
+				      <guid>test-1</guid>
+				      <title>Manual test article</title>
+				      <link>https://test.example/article</link>
+				    </item>
+				  </channel>
+				</rss>
+				""";
+		var collector = new RssNewsCollector(
+				new RssFeedParser(),
+				new RssProperties(List.of("https://configured.example/feed")),
+				sourceService,
+				new RssFeedDiscovery(),
+				url -> rss);
+
+		var result = collector.testSource("https://test.example/feed");
+
+		assertThat(result.success()).isTrue();
+		assertThat(result.articleCount()).isEqualTo(1);
+		assertThat(result.url()).isEqualTo("https://test.example/feed");
+		verify(sourceService).recordCollectionSuccess(Mockito.eq("https://test.example/feed"), Mockito.any());
 	}
 }

@@ -8,8 +8,11 @@ import static org.mockito.Mockito.when;
 import com.hermesnews.digest.DailyDigestResult;
 import com.hermesnews.digest.DailyDigestService;
 import com.hermesnews.news.NewsSource;
+import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
+import com.hermesnews.news.NewsSourceTestResponse;
 import com.hermesnews.news.NewsSourceType;
+import com.hermesnews.news.RssNewsCollector;
 import com.hermesnews.preferences.PersonalPreference;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
@@ -35,6 +38,9 @@ class AgentServiceTest {
 
 	@Mock
 	private NewsSourceService newsSourceService;
+
+	@Mock
+	private RssNewsCollector rssNewsCollector;
 
 	@Test
 	void runsDailyDigestDeterministicallyWithoutCallingAi() {
@@ -116,6 +122,105 @@ class AgentServiceTest {
 	}
 
 	@Test
+	void listsSourcesDeterministicallyWithoutCallingAi() {
+		when(newsSourceService.listSources()).thenReturn(List.of(new NewsSourceResponse(
+				null,
+				"example.com",
+				NewsSourceType.RSS,
+				"https://example.com/feed",
+				true,
+				null,
+				null,
+				null,
+				null,
+				0,
+				"UNKNOWN")));
+		var service = service();
+
+		var response = service.handleIncomingText("quais fontes estao ativas?");
+
+		assertThat(response)
+				.contains("Fontes RSS:")
+				.contains("https://example.com/feed")
+				.contains("ativa")
+				.contains("UNKNOWN");
+		verify(newsSourceService).listSources();
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, rssNewsCollector);
+	}
+
+	@Test
+	void testsRssSourceDeterministicallyWithoutCallingAi() {
+		when(rssNewsCollector.testSource("https://example.com/feed"))
+				.thenReturn(new NewsSourceTestResponse(
+						"https://example.com/feed",
+						true,
+						2,
+						"https://example.com/feed",
+						"Source returned 2 article(s)."));
+		var service = service();
+
+		var response = service.handleIncomingText("teste a fonte https://example.com/feed");
+
+		assertThat(response)
+				.contains("Fonte RSS OK")
+				.contains("2 noticias")
+				.contains("https://example.com/feed");
+		verify(rssNewsCollector).testSource("https://example.com/feed");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
+	void testsRssSourceByLabelWithoutCallingAi() {
+		when(newsSourceService.resolveSourceUrl("Akita")).thenReturn("https://akitaonrails.com/en/");
+		when(rssNewsCollector.testSource("https://akitaonrails.com/en/"))
+				.thenReturn(new NewsSourceTestResponse(
+						"https://akitaonrails.com/en/",
+						true,
+						1,
+						"https://akitaonrails.com/en/index.xml",
+						"Source returned 1 article(s)."));
+		var service = service();
+
+		var response = service.handleIncomingText("teste Akita");
+
+		assertThat(response)
+				.contains("Fonte RSS OK")
+				.contains("1 noticias")
+				.contains("https://akitaonrails.com/en/");
+		verify(newsSourceService).resolveSourceUrl("Akita");
+		verify(rssNewsCollector).testSource("https://akitaonrails.com/en/");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService);
+	}
+
+	@Test
+	void disablesRssSourceByLabelWithoutCallingAi() {
+		var source = new NewsSource("TechCrunch", NewsSourceType.RSS, "https://techcrunch.com/");
+		source.disable();
+		when(newsSourceService.disableSource("TechCrunch")).thenReturn(source);
+		var service = service();
+
+		var response = service.handleIncomingText("remova TechCrunch");
+
+		assertThat(response).isEqualTo("Fonte RSS desativada: https://techcrunch.com/");
+		verify(newsSourceService).disableSource("TechCrunch");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, rssNewsCollector);
+	}
+
+	@Test
+	void renamesRssSourceByUrlWithoutCallingAi() {
+		var source = new NewsSource("techcrunch.com", NewsSourceType.RSS, "https://techcrunch.com/");
+		source.rename("TechCrunch");
+		when(newsSourceService.updateLabel("https://techcrunch.com/", "TechCrunch")).thenReturn(source);
+		var service = service();
+
+		var response = service.handleIncomingText("renomeie fonte https://techcrunch.com/ para TechCrunch");
+
+		assertThat(response).isEqualTo("Fonte RSS renomeada: TechCrunch -> https://techcrunch.com/");
+		verify(newsSourceService).updateLabel("https://techcrunch.com/", "TechCrunch");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, rssNewsCollector);
+	}
+
+	@Test
 	void stripsTrailingColonFromRssSourceUrlBeforeCallingSourceService() {
 		var source = new NewsSource("akitaonrails.com", NewsSourceType.RSS, "https://akitaonrails.com/en/");
 		when(newsSourceService.addRssSource("https://akitaonrails.com/en/")).thenReturn(source);
@@ -141,6 +246,6 @@ class AgentServiceTest {
 	}
 
 	private AgentService service() {
-		return new AgentService(interpreter, dailyDigestService, preferenceService, newsSourceService);
+		return new AgentService(interpreter, dailyDigestService, preferenceService, newsSourceService, rssNewsCollector);
 	}
 }

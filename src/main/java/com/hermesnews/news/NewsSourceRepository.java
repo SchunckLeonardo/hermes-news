@@ -10,4 +10,8 @@ public interface NewsSourceRepository extends JpaRepository<NewsSource, UUID> {
 	Optional<NewsSource> findByUrl(String url);
 
 	List<NewsSource> findAllByEnabledTrueAndType(NewsSourceType type);
+
+	List<NewsSource> findAllByOrderByCreatedAtAsc();
+
+	List<NewsSource> findAllByNameIgnoreCaseOrderByCreatedAtAsc(String name);
 }

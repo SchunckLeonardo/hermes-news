@@ -3,6 +3,7 @@ package com.hermesnews.news;
 import jakarta.transaction.Transactional;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,17 @@ public class NewsSourceService {
 	}
 
 	@Transactional
+	public NewsSource updateLabel(String reference, String label) {
+		var source = findExisting(reference);
+		source.rename(label);
+		return repository.save(source);
+	}
+
+	public String resolveSourceUrl(String reference) {
+		return findExisting(reference).getUrl();
+	}
+
+	@Transactional
 	public NewsSource disableSource(String url) {
 		var source = findExisting(url);
 		source.disable();
@@ -47,10 +59,59 @@ public class NewsSourceService {
 				.toList();
 	}
 
+	public List<NewsSourceResponse> listSources() {
+		return repository.findAllByOrderByCreatedAtAsc().stream()
+				.map(NewsSourceResponse::from)
+				.toList();
+	}
+
+	@Transactional
+	public void recordCollectionSuccess(String url, Instant occurredAt) {
+		findByNormalizedUrl(url).ifPresent(source -> {
+			source.recordCollectionSuccess(occurredAt);
+			repository.save(source);
+		});
+	}
+
+	@Transactional
+	public void recordCollectionFailure(String url, String message, Instant occurredAt) {
+		findByNormalizedUrl(url).ifPresent(source -> {
+			source.recordCollectionFailure(message, occurredAt);
+			repository.save(source);
+		});
+	}
+
 	private NewsSource findExisting(String url) {
-		var normalizedUrl = normalizePublicHttpUrl(url);
-		return repository.findByUrl(normalizedUrl)
-				.orElseThrow(() -> new IllegalArgumentException("Source not found: " + normalizedUrl));
+		if (looksLikeHttpUrl(url)) {
+			var normalizedUrl = normalizePublicHttpUrl(url);
+			return repository.findByUrl(normalizedUrl)
+					.orElseThrow(() -> new IllegalArgumentException("Source not found: " + normalizedUrl));
+		}
+		var label = normalizeReference(url);
+		return repository.findAllByNameIgnoreCaseOrderByCreatedAtAsc(label).stream()
+				.findFirst()
+				.orElseThrow(() -> new IllegalArgumentException("Source not found: " + label));
+	}
+
+	private java.util.Optional<NewsSource> findByNormalizedUrl(String url) {
+		try {
+			return repository.findByUrl(normalizePublicHttpUrl(url));
+		}
+		catch (IllegalArgumentException exception) {
+			return java.util.Optional.empty();
+		}
+	}
+
+	private static boolean looksLikeHttpUrl(String value) {
+		var normalized = value == null ? "" : value.strip().toLowerCase(Locale.ROOT);
+		return normalized.startsWith("http://") || normalized.startsWith("https://");
+	}
+
+	private static String normalizeReference(String value) {
+		if (value == null || value.isBlank()) {
+			throw new IllegalArgumentException("Source label must not be blank");
+		}
+		return value.strip();
 	}
 
 	static String normalizePublicHttpUrl(String value) {

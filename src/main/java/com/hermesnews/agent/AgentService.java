@@ -1,7 +1,10 @@
 package com.hermesnews.agent;
 
 import com.hermesnews.digest.DailyDigestService;
+import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
+import com.hermesnews.news.NewsSourceTestResponse;
+import com.hermesnews.news.RssNewsCollector;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
 import java.time.LocalTime;
@@ -22,23 +25,27 @@ public class AgentService {
 			- gerar e enviar o digest diario de noticias de tecnologia;
 			- responder perguntas simples sobre o proprio agente;
 			- atualizar preferencias pessoais de temas, fontes, quantidade de noticias, horario preferido e idioma;
-			- usar as preferencias salvas para priorizar temas e fontes no ranking.
+			- usar as preferencias salvas para priorizar temas e fontes no ranking;
+			- listar, testar, ativar, desativar e cadastrar fontes RSS publicas.
 			""".trim();
 
 	private final AgentInterpreter interpreter;
 	private final DailyDigestService dailyDigestService;
 	private final PreferenceService preferenceService;
 	private final NewsSourceService newsSourceService;
+	private final RssNewsCollector rssNewsCollector;
 
 	public AgentService(
 			AgentInterpreter interpreter,
 			DailyDigestService dailyDigestService,
 			PreferenceService preferenceService,
-			NewsSourceService newsSourceService) {
+			NewsSourceService newsSourceService,
+			RssNewsCollector rssNewsCollector) {
 		this.interpreter = interpreter;
 		this.dailyDigestService = dailyDigestService;
 		this.preferenceService = preferenceService;
 		this.newsSourceService = newsSourceService;
+		this.rssNewsCollector = rssNewsCollector;
 	}
 
 	public String handleIncomingText(String message) {
@@ -51,6 +58,9 @@ public class AgentService {
 		}
 		if (asksForPreferences(normalizedMessage)) {
 			return currentPreferencesMessage();
+		}
+		if (asksForSources(normalizedMessage)) {
+			return sourcesMessage();
 		}
 		var sourceResponse = handleSourceCommand(normalizedMessage);
 		if (hasText(sourceResponse)) {
@@ -100,25 +110,127 @@ public class AgentService {
 	}
 
 	private String handleSourceCommand(String message) {
-		var url = firstUrl(message);
-		if (!hasText(url) || !containsAny(normalize(message), "fonte", "rss", "feed")) {
+		var normalized = normalize(message);
+		if (!containsAny(normalized,
+				"fonte",
+				"rss",
+				"feed",
+				"teste",
+				"testar",
+				"valide",
+				"validar",
+				"desative",
+				"desativar",
+				"remova",
+				"remover",
+				"ative",
+				"ativar",
+				"renomeie",
+				"renomear")) {
+			return "";
+		}
+		var labelUpdate = parseSourceLabelUpdate(message);
+		var reference = labelUpdate == null ? sourceReference(message) : labelUpdate.reference();
+		if (!hasText(reference)) {
 			return "";
 		}
 		try {
-			if (containsAny(normalize(message), "desative", "desativar", "remova", "remover")) {
-				var source = newsSourceService.disableSource(url);
+			if (labelUpdate != null) {
+				var source = newsSourceService.updateLabel(labelUpdate.reference(), labelUpdate.label());
+				return "Fonte RSS renomeada: " + source.getName() + " -> " + source.getUrl();
+			}
+			if (containsAny(normalized, "teste", "testar", "valide", "validar")) {
+				var testUrl = looksLikeHttpUrl(reference) ? reference : newsSourceService.resolveSourceUrl(reference);
+				return testSourceMessage(rssNewsCollector.testSource(testUrl));
+			}
+			if (containsAny(normalized, "desative", "desativar", "remova", "remover")) {
+				var source = newsSourceService.disableSource(reference);
 				return "Fonte RSS desativada: " + source.getUrl();
 			}
-			if (containsAny(normalize(message), "ative", "ativar", "reative", "reativar")) {
-				var source = newsSourceService.enableSource(url);
+			if (containsAny(normalized, "ative", "ativar", "reative", "reativar")) {
+				var source = newsSourceService.enableSource(reference);
 				return "Fonte RSS ativada: " + source.getUrl();
 			}
-			var source = newsSourceService.addRssSource(url);
-			return "Fonte RSS adicionada: " + source.getUrl();
+			if (looksLikeHttpUrl(reference)) {
+				var source = newsSourceService.addRssSource(reference);
+				return "Fonte RSS adicionada: " + source.getUrl();
+			}
+			return "";
 		}
 		catch (IllegalArgumentException exception) {
 			return "Nao consegui salvar essa fonte. Envie uma URL publica http ou https de RSS.";
 		}
+	}
+
+	private String sourcesMessage() {
+		var sources = newsSourceService.listSources();
+		if (sources.isEmpty()) {
+			return "Nenhuma fonte RSS cadastrada.";
+		}
+		var lines = new ArrayList<String>();
+		lines.add("Fontes RSS:");
+		for (NewsSourceResponse source : sources) {
+			lines.add("- %s [%s, %s]".formatted(source.url(), source.enabled() ? "ativa" : "inativa", source.status()));
+		}
+		return String.join("\n", lines);
+	}
+
+	private static String testSourceMessage(NewsSourceTestResponse result) {
+		if (result.success()) {
+			return "Fonte RSS OK: %s (%d noticias).".formatted(result.url(), result.articleCount());
+		}
+		return "Fonte RSS com falha: %s - %s".formatted(result.url(), result.message());
+	}
+
+	private static SourceLabelUpdate parseSourceLabelUpdate(String message) {
+		var normalized = normalize(message);
+		if (!containsAny(normalized, "renomeie", "renomear")) {
+			return null;
+		}
+		var separatorIndex = normalized.indexOf(" para ");
+		if (separatorIndex < 0) {
+			return null;
+		}
+		var referencePart = message.substring(0, separatorIndex).trim();
+		var label = message.substring(separatorIndex + " para ".length()).trim();
+		var reference = sourceReference(referencePart);
+		return hasText(reference) && hasText(label) ? new SourceLabelUpdate(reference, label) : null;
+	}
+
+	private static String sourceReference(String message) {
+		var url = firstUrl(message);
+		if (hasText(url)) {
+			return url;
+		}
+		var normalized = normalize(message);
+		for (String prefix : List.of(
+				"teste a fonte ",
+				"teste fonte ",
+				"testar a fonte ",
+				"testar fonte ",
+				"teste ",
+				"valide a fonte ",
+				"valide fonte ",
+				"validar fonte ",
+				"desative a fonte ",
+				"desative fonte ",
+				"desativar fonte ",
+				"remova a fonte ",
+				"remova fonte ",
+				"remover fonte ",
+				"remova ",
+				"ative a fonte ",
+				"ative fonte ",
+				"ativar fonte ",
+				"reative fonte ",
+				"renomeie a fonte ",
+				"renomeie fonte ",
+				"renomear fonte ")) {
+			if (normalized.startsWith(prefix) && message.length() >= prefix.length()) {
+				return message.substring(prefix.length()).trim();
+			}
+		}
+		return "";
 	}
 
 	private static PreferenceUpdateRequest parsePreferenceUpdate(String message) {
@@ -197,6 +309,11 @@ public class AgentService {
 				|| normalized.contains("mostrar preferencias");
 	}
 
+	private static boolean asksForSources(String message) {
+		var normalized = normalize(message);
+		return containsAny(normalized, "fontes ativas", "fontes rss", "listar fontes", "quais fontes", "mostrar fontes");
+	}
+
 	private static boolean asksForDigest(String message) {
 		var normalized = normalize(message);
 		return normalized.contains("me envia o digest")
@@ -219,6 +336,14 @@ public class AgentService {
 			}
 		}
 		return "";
+	}
+
+	private static boolean looksLikeHttpUrl(String value) {
+		var normalized = value == null ? "" : value.strip().toLowerCase();
+		return normalized.startsWith("http://") || normalized.startsWith("https://");
+	}
+
+	private record SourceLabelUpdate(String reference, String label) {
 	}
 
 	private static boolean containsAny(String value, String... candidates) {

@@ -75,6 +75,203 @@
           ]
         },
         {
+          "name": "List News Sources",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/news-sources",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('response is an array', function () { pm.expect(body).to.be.an('array'); });",
+                  "if (body.length > 0 && body[0].url) { pm.environment.set('source_url', body[0].url); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add RSS Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{source_url}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/news-sources/rss",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources", "rss"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const body = pm.response.json();",
+                  "pm.test('source has url and status', function () { pm.expect(body).to.have.property('url'); pm.expect(body).to.have.property('status'); });",
+                  "pm.environment.set('source_url', body.url);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename RSS Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{source_url}}\",\n  \"name\": \"{{source_label}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/news-sources/label",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources", "label"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('source label updated', function () { pm.expect(body.name).to.eql(pm.environment.get('source_label')); });",
+                  "pm.environment.set('source_url', body.url);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Test RSS Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{source_url}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/news-sources/test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources", "test"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('test result has success flag', function () { pm.expect(body).to.have.property('success'); });",
+                  "pm.test('test result has message', function () { pm.expect(body).to.have.property('message'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disable RSS Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{source_url}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/news-sources/disable",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources", "disable"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('source disabled', function () { pm.expect(pm.response.json().enabled).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enable RSS Source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"{{source_url}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/news-sources/enable",
+              "host": ["{{base_url}}"],
+              "path": ["api", "news-sources", "enable"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('source enabled', function () { pm.expect(pm.response.json().enabled).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Receive WhatsApp Webhook (Record Only)",
           "request": {
             "method": "POST",

@@ -1,6 +1,7 @@
 package com.hermesnews.news;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -65,9 +66,33 @@ public class RssNewsCollector implements NewsCollector {
 		var feeds = feedsToCollect();
 		var articles = new ArrayList<CollectedArticle>();
 		for (String feed : feeds) {
-			articles.addAll(collectFrom(feed));
+			var attempt = collectFrom(feed);
+			if (attempt.success()) {
+				newsSourceService.recordCollectionSuccess(feed, Instant.now());
+				articles.addAll(attempt.articles());
+			}
+			else {
+				log.warn("Skipping RSS feed {}: {}", feed, attempt.message());
+				newsSourceService.recordCollectionFailure(feed, attempt.message(), Instant.now());
+			}
 		}
 		return articles;
+	}
+
+	public NewsSourceTestResponse testSource(String url) {
+		var normalizedUrl = NewsSourceService.normalizePublicHttpUrl(url);
+		var attempt = collectFrom(normalizedUrl);
+		if (attempt.success()) {
+			newsSourceService.recordCollectionSuccess(normalizedUrl, Instant.now());
+			return new NewsSourceTestResponse(
+					normalizedUrl,
+					true,
+					attempt.articles().size(),
+					attempt.resolvedFeedUrl(),
+					"Source returned " + attempt.articles().size() + " article(s).");
+		}
+		newsSourceService.recordCollectionFailure(normalizedUrl, attempt.message(), Instant.now());
+		return new NewsSourceTestResponse(normalizedUrl, false, 0, "", attempt.message());
 	}
 
 	List<String> feedsToCollect() {
@@ -82,53 +107,64 @@ public class RssNewsCollector implements NewsCollector {
 		return List.copyOf(feeds);
 	}
 
-	private List<CollectedArticle> collectFrom(String feed) {
+	private RssCollectionAttempt collectFrom(String feed) {
 		try {
 			var body = fetcher.apply(feed);
 			if (body == null || body.isBlank()) {
-				return List.of();
+				return RssCollectionAttempt.failure("Empty RSS response");
 			}
 			var directArticles = parse(feed, body);
 			if (!directArticles.isEmpty()) {
-				return directArticles;
+				return RssCollectionAttempt.success(feed, directArticles);
 			}
 			return collectFromDiscoveredFeeds(feed, body);
 		}
 		catch (WebClientException | IllegalArgumentException exception) {
-			log.warn("Skipping RSS feed {}: {}", feed, exception.getMessage());
-			return List.of();
+			return RssCollectionAttempt.failure(exception.getMessage());
 		}
 		catch (DataBufferLimitException exception) {
-			log.warn("Skipping RSS feed {}: response exceeded RSS max-response-size ({})", feed, properties.maxResponseSize());
-			return List.of();
+			return RssCollectionAttempt.failure("response exceeded RSS max-response-size (" + properties.maxResponseSize() + ")");
 		}
 	}
 
-	private List<CollectedArticle> collectFromDiscoveredFeeds(String pageUrl, String html) {
+	private RssCollectionAttempt collectFromDiscoveredFeeds(String pageUrl, String html) {
 		var articles = new ArrayList<CollectedArticle>();
 		var discoveredFeeds = discovery.discover(pageUrl, html);
+		var resolvedFeedUrl = "";
+		var lastError = "no RSS/Atom items or discoverable feed found";
 		for (int index = 0; index < discoveredFeeds.size() && index < MAX_DISCOVERED_FEEDS; index++) {
 			var discoveredFeed = discoveredFeeds.get(index);
 			try {
 				var xml = fetcher.apply(discoveredFeed);
 				if (xml != null && !xml.isBlank()) {
-					articles.addAll(parser.parse(discoveredFeed, xml));
+					var discoveredArticles = parser.parse(discoveredFeed, xml);
+					if (!discoveredArticles.isEmpty()) {
+						if (resolvedFeedUrl.isBlank()) {
+							resolvedFeedUrl = discoveredFeed;
+						}
+						articles.addAll(discoveredArticles);
+					}
+					else {
+						lastError = "discovered feed returned no RSS/Atom items: " + discoveredFeed;
+					}
 				}
 			}
 			catch (RssParsingException | WebClientException | IllegalArgumentException exception) {
+				lastError = exception.getMessage();
 				log.warn("Skipping discovered RSS feed {} from {}: {}", discoveredFeed, pageUrl, exception.getMessage());
 			}
 			catch (DataBufferLimitException exception) {
+				lastError = "response exceeded RSS max-response-size (" + properties.maxResponseSize() + ")";
 				log.warn("Skipping discovered RSS feed {} from {}: response exceeded RSS max-response-size ({})",
 						discoveredFeed,
 						pageUrl,
 						properties.maxResponseSize());
 			}
 		}
-		if (articles.isEmpty()) {
-			log.warn("Skipping RSS feed {}: no RSS/Atom items or discoverable feed found", pageUrl);
+		if (!articles.isEmpty()) {
+			return RssCollectionAttempt.success(resolvedFeedUrl, articles);
 		}
-		return articles;
+		return RssCollectionAttempt.failure(lastError);
 	}
 
 	private List<CollectedArticle> parse(String sourceName, String body) {
@@ -157,6 +193,21 @@ public class RssNewsCollector implements NewsCollector {
 		}
 		catch (IllegalArgumentException exception) {
 			log.warn("Skipping invalid RSS source {}: {}", feed, exception.getMessage());
+		}
+	}
+
+	private record RssCollectionAttempt(List<CollectedArticle> articles, String resolvedFeedUrl, String message) {
+
+		static RssCollectionAttempt success(String resolvedFeedUrl, List<CollectedArticle> articles) {
+			return new RssCollectionAttempt(List.copyOf(articles), resolvedFeedUrl, "");
+		}
+
+		static RssCollectionAttempt failure(String message) {
+			return new RssCollectionAttempt(List.of(), "", message == null || message.isBlank() ? "RSS collection failed" : message);
+		}
+
+		boolean success() {
+			return !articles.isEmpty();
 		}
 	}
 }
