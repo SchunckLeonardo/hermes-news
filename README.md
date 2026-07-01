@@ -71,7 +71,7 @@ Key variables are documented in `.env.example`:
 - `POSTGRES_JDBC_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 - `REDIS_HOST`, `REDIS_PORT`
 - `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`, `AI_SUMMARY_TIMEOUT`
-- `RSS_FEEDS`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
+- `RSS_FEEDS`, `RSS_MAX_RESPONSE_SIZE`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
 - `RANKING_KEYWORDS`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
 - `EVOLUTION_SERVER_URL`, `EVOLUTION_POSTGRES_DB`, `EVOLUTION_POSTGRES_USER`, `EVOLUTION_POSTGRES_PASSWORD`
@@ -164,7 +164,7 @@ The agent currently supports only these actions:
 - Add, enable and disable public RSS source URLs.
 - Use saved themes, excluded themes, preferred sources, RSS sources, news count and preferred time in ranking/digest generation.
 
-RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them.
+RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them. `RSS_MAX_RESPONSE_SIZE` defaults to `2MB`; increase it only for trusted large feeds/pages.
 
 Example preference commands:
 

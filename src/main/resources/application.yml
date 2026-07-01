@@ -38,6 +38,7 @@ app:
     zone: ${APP_SCHEDULER_ZONE:America/Sao_Paulo}
   rss:
     feeds: ${RSS_FEEDS:https://www.infoq.com/feed/,https://hnrss.org/frontpage}
+    max-response-size: ${RSS_MAX_RESPONSE_SIZE:2MB}
   hacker-news:
     base-url: ${HACKER_NEWS_BASE_URL:https://hacker-news.firebaseio.com/v0}
     max-items: ${HACKER_NEWS_MAX_ITEMS:10}

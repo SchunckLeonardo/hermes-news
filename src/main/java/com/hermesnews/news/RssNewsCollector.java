@@ -8,7 +8,9 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientException;
 
@@ -32,7 +34,11 @@ public class RssNewsCollector implements NewsCollector {
 			RssProperties properties,
 			RssFeedDiscovery discovery,
 			NewsSourceService newsSourceService) {
-		this.webClient = builder.build();
+		this.webClient = builder.clone()
+				.exchangeStrategies(ExchangeStrategies.builder()
+						.codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(properties.maxResponseBytes()))
+						.build())
+				.build();
 		this.parser = parser;
 		this.properties = properties;
 		this.newsSourceService = newsSourceService;
@@ -92,6 +98,10 @@ public class RssNewsCollector implements NewsCollector {
 			log.warn("Skipping RSS feed {}: {}", feed, exception.getMessage());
 			return List.of();
 		}
+		catch (DataBufferLimitException exception) {
+			log.warn("Skipping RSS feed {}: response exceeded RSS max-response-size ({})", feed, properties.maxResponseSize());
+			return List.of();
+		}
 	}
 
 	private List<CollectedArticle> collectFromDiscoveredFeeds(String pageUrl, String html) {
@@ -107,6 +117,12 @@ public class RssNewsCollector implements NewsCollector {
 			}
 			catch (RssParsingException | WebClientException | IllegalArgumentException exception) {
 				log.warn("Skipping discovered RSS feed {} from {}: {}", discoveredFeed, pageUrl, exception.getMessage());
+			}
+			catch (DataBufferLimitException exception) {
+				log.warn("Skipping discovered RSS feed {} from {}: response exceeded RSS max-response-size ({})",
+						discoveredFeed,
+						pageUrl,
+						properties.maxResponseSize());
 			}
 		}
 		if (articles.isEmpty()) {
@@ -124,7 +140,7 @@ public class RssNewsCollector implements NewsCollector {
 		}
 	}
 
-	private String fetch(String url) {
+	String fetch(String url) {
 		return webClient.get()
 				.uri(url)
 				.retrieve()
