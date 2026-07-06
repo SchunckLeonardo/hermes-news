@@ -8,7 +8,7 @@ group = "com.hermesnews"
 version = "0.0.1-SNAPSHOT"
 description = "Personal technology news assistant"
 
-val springAiVersion = "1.1.8"
+val springAiVersion = "2.0.0"
 
 java {
 	sourceCompatibility = JavaVersion.VERSION_21
