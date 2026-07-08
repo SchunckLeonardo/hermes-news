@@ -14,36 +14,44 @@ public class MockAiSummaryService implements AiSummaryService {
 
 	private static final int MAX_ITEMS = 10;
 	private static final int MAX_SUMMARY_LENGTH = 240;
+	private static final int MAX_TITLE_LENGTH = 140;
 
 	@Override
 	public String summarize(List<RankedArticle> articles) {
 		if (articles.isEmpty()) {
-			return "Hermes News - Digest de tecnologia\n\nNenhuma noticia relevante foi coletada hoje.";
+			return """
+					*Hermes News*
+					Digest de tecnologia
+
+					Nenhuma noticia nova relevante foi coletada hoje.
+					""".trim();
 		}
 		var grouped = groupedByTheme(articles);
-		var builder = new StringBuilder("Hermes News - Digest de tecnologia\n\n");
+		var total = grouped.values().stream().mapToInt(List::size).sum();
+		var builder = new StringBuilder("*Hermes News*\nDigest de tecnologia\n\n")
+				.append(total == 1 ? "1 noticia nova selecionada." : total + " noticias novas selecionadas.")
+				.append("\n\n");
+		var itemNumber = 1;
 		for (var entry : grouped.entrySet()) {
-			builder.append(entry.getKey()).append("\n");
 			if (entry.getValue().isEmpty()) {
-				builder.append("- Nenhum destaque.\n\n");
 				continue;
 			}
+			builder.append("*").append(entry.getKey()).append("*\n");
 			for (RankedArticle ranked : entry.getValue()) {
 				var article = ranked.article();
-				builder.append("- ")
-						.append(article.title())
-						.append(" (score ")
-						.append(ranked.score())
-						.append(")\n")
-						.append("  Fonte: ")
-						.append(article.sourceName())
+				builder.append(itemNumber++)
+						.append(". *")
+						.append(cleanTitle(article.title()))
+						.append("*\n")
+						.append("Por que importa: ")
+						.append(reason(article.summary()))
 						.append("\n")
-						.append("  Link: ")
-						.append(article.url())
+						.append("Fonte: ")
+						.append(sourceName(article.sourceName()))
+						.append("\n")
+						.append("Link: ")
+						.append(cleanLine(article.url(), Integer.MAX_VALUE))
 						.append("\n");
-				if (article.summary() != null && !article.summary().isBlank()) {
-					builder.append("  Resumo: ").append(cleanSummary(article.summary())).append("\n");
-				}
 			}
 			builder.append("\n");
 		}
@@ -66,8 +74,8 @@ public class MockAiSummaryService implements AiSummaryService {
 	}
 
 	private static String themeFor(RankedArticle ranked) {
-		var text = (ranked.article().title() + " " + ranked.article().summary()).toLowerCase(Locale.ROOT);
-		if (text.contains("ai") || text.contains("llm") || text.contains("inteligencia artificial")) {
+		var text = (safe(ranked.article().title()) + " " + safe(ranked.article().summary())).toLowerCase(Locale.ROOT);
+		if (containsTerm(text, "ai") || containsTerm(text, "llm") || text.contains("inteligencia artificial")) {
 			return "IA";
 		}
 		if (text.contains("java") || text.contains("spring")) {
@@ -82,14 +90,49 @@ public class MockAiSummaryService implements AiSummaryService {
 		return "Outras";
 	}
 
-	private static String cleanSummary(String value) {
+	private static boolean containsTerm(String text, String term) {
+		return text.matches(".*\\b" + term + "\\b.*");
+	}
+
+	private static String cleanTitle(String value) {
+		var cleaned = cleanLine(value, MAX_TITLE_LENGTH);
+		if (cleaned.isBlank()) {
+			return "Noticia sem titulo";
+		}
+		return cleaned;
+	}
+
+	private static String reason(String value) {
+		var cleaned = cleanLine(value, MAX_SUMMARY_LENGTH);
+		if (cleaned.isBlank()) {
+			return "Resumo indisponivel; abra o link para ver os detalhes.";
+		}
+		return cleaned;
+	}
+
+	private static String sourceName(String value) {
+		var cleaned = cleanLine(value, 80);
+		if (cleaned.isBlank()) {
+			return "Fonte desconhecida";
+		}
+		return cleaned;
+	}
+
+	private static String cleanLine(String value, int maxLength) {
+		if (value == null) {
+			return "";
+		}
 		var cleaned = value
 				.replaceAll("<[^>]+>", " ")
 				.replaceAll("\\s+", " ")
 				.trim();
-		if (cleaned.length() <= MAX_SUMMARY_LENGTH) {
+		if (cleaned.length() <= maxLength) {
 			return cleaned;
 		}
-		return cleaned.substring(0, MAX_SUMMARY_LENGTH).trim() + "...";
+		return cleaned.substring(0, maxLength).trim() + "...";
+	}
+
+	private static String safe(String value) {
+		return value == null ? "" : value;
 	}
 }

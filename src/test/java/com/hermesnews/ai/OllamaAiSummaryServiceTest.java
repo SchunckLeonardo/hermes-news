@@ -26,6 +26,11 @@ class OllamaAiSummaryServiceTest {
 
 		assertThat(summary).isEqualTo("Resumo qwen3");
 		assertThat(client.systemPrompt).contains("Hermes News");
+		assertThat(client.systemPrompt)
+				.contains("*Hermes News*")
+				.contains("Por que importa:")
+				.contains("mostre apenas secoes com noticias")
+				.contains("Nao mostre score tecnico");
 		assertThat(client.userPrompt)
 				.contains("Preferencias do usuario")
 				.contains("ai, java, backend, cloud")
@@ -43,7 +48,8 @@ class OllamaAiSummaryServiceTest {
 		var summary = service.summarize(List.of(new RankedArticle(article("Java backend agents", "https://example.com/java"), 7)));
 
 		assertThat(summary)
-				.contains("Hermes News - Digest de tecnologia")
+				.contains("*Hermes News*")
+				.contains("Digest de tecnologia")
 				.contains("Java backend agents")
 				.contains("https://example.com/java");
 	}
@@ -63,7 +69,8 @@ class OllamaAiSummaryServiceTest {
 		var summary = service.summarize(List.of(new RankedArticle(article("Cloud backend", "https://example.com/cloud"), 7)));
 
 		assertThat(summary)
-				.contains("Hermes News - Digest de tecnologia")
+				.contains("*Hermes News*")
+				.contains("Digest de tecnologia")
 				.contains("Cloud backend");
 	}
 

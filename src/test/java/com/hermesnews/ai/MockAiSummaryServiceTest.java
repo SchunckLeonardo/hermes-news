@@ -25,11 +25,47 @@ class MockAiSummaryServiceTest {
 		var digest = service.summarize(List.of(new RankedArticle(article, 8)));
 
 		assertThat(digest)
-				.contains("Hermes News - Digest de tecnologia")
-				.contains("Java")
+				.contains("*Hermes News*")
+				.contains("Digest de tecnologia")
+				.contains("*Java*")
 				.contains("Java agents for backend teams")
 				.contains("Fonte: hacker-news")
 				.contains("https://example.com/java-agents");
+	}
+
+	@Test
+	void formatsDigestForQuickWhatsAppReading() {
+		var ai = new CollectedArticle(
+				"InfoQ",
+				"ai-1",
+				"LLM routing patterns for production apps",
+				"https://example.com/llm-routing",
+				"<p>Teams are using routing to reduce cost and improve reliability in AI features.</p>",
+				Instant.parse("2026-06-29T08:00:00Z"));
+		var java = new CollectedArticle(
+				"Spring Blog",
+				"java-1",
+				"Spring Boot observability for backend teams",
+				"https://example.com/spring-observability",
+				"New tracing defaults make Java services easier to operate.",
+				Instant.parse("2026-06-29T07:00:00Z"));
+
+		var digest = new MockAiSummaryService().summarize(List.of(
+				new RankedArticle(ai, 10),
+				new RankedArticle(java, 8)));
+
+		assertThat(digest).startsWith("*Hermes News*\nDigest de tecnologia\n\n2 noticias novas selecionadas.");
+		assertThat(digest)
+				.contains("*IA*")
+				.contains("1. *LLM routing patterns for production apps*")
+				.contains("Por que importa: Teams are using routing to reduce cost and improve reliability in AI features.")
+				.contains("Fonte: InfoQ")
+				.contains("Link: https://example.com/llm-routing")
+				.contains("*Java*")
+				.contains("2. *Spring Boot observability for backend teams*");
+		assertThat(digest).doesNotContain("score");
+		assertThat(digest).doesNotContain("*Backend*");
+		assertThat(digest).doesNotContain("<p>");
 	}
 
 	@Test
@@ -54,7 +90,8 @@ class MockAiSummaryServiceTest {
 				new RankedArticle(ai, 8),
 				new RankedArticle(java, 7)));
 
-		assertThat(digest).contains("IA", "Java", "Backend", "Cloud");
+		assertThat(digest).contains("*IA*", "*Java*");
+		assertThat(digest).doesNotContain("*Backend*").doesNotContain("*Cloud*");
 		assertThat(digest.indexOf("https://example.com/java"))
 				.isEqualTo(digest.lastIndexOf("https://example.com/java"));
 	}

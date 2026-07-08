@@ -221,7 +221,22 @@ The scheduler checks every minute by default and sends the digest once per day w
 
 ## Digest Format
 
-The digest is formatted for WhatsApp with grouped sections for `IA`, `Java`, `Backend`, `Cloud` and `Outras`. Each item includes title, source, score, summary when available and the original link. URLs already saved in `articles` are skipped so the same article is not sent again.
+The digest is formatted for quick WhatsApp reading with a short header, the number of fresh stories, only non-empty sections, and numbered items:
+
+```text
+*Hermes News*
+Digest de tecnologia
+
+2 noticias novas selecionadas.
+
+*IA*
+1. *LLM routing patterns for production apps*
+Por que importa: Teams are using routing to reduce cost and improve reliability in AI features.
+Fonte: InfoQ
+Link: https://example.com/llm-routing
+```
+
+Sections may be `IA`, `Java`, `Backend`, `Cloud` and `Outras`. Each item includes title, practical reason, source and original link; internal ranking scores are not shown. URLs already saved in `articles` are skipped so the same article is not sent again.
 
 ## Postman
 
