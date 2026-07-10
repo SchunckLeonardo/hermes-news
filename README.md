@@ -82,12 +82,29 @@ Key variables are documented in `.env.example`:
 - `REDIS_HOST`, `REDIS_PORT`
 - `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`, `AI_SUMMARY_TIMEOUT`
 - `RSS_FEEDS`, `RSS_MAX_RESPONSE_SIZE`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
-- `RANKING_KEYWORDS`
+- `RANKING_KEYWORDS`, `RANKING_OFFICIAL_SOURCES`, `RANKING_PRIORITY_ENTITIES`, `RANKING_LAUNCH_KEYWORDS`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
 - `EVOLUTION_SERVER_URL`, `EVOLUTION_POSTGRES_DB`, `EVOLUTION_POSTGRES_USER`, `EVOLUTION_POSTGRES_PASSWORD`
 - `APP_DIGEST_CHECK_CRON`, `APP_SCHEDULER_ZONE`
 
 Do not commit real credentials.
+
+## Official Sources and Ranking
+
+The default RSS list includes the official OpenAI news feed:
+
+```text
+https://openai.com/news/rss.xml
+```
+
+Ranking v2 still respects saved preferences, but now also boosts:
+
+- official source domains from `RANKING_OFFICIAL_SOURCES`, including OpenAI, Anthropic, Google DeepMind, AWS, Google Cloud, Azure, Spring, OpenJDK and Kubernetes defaults;
+- recent articles from the last 24 hours, 72 hours and 7 days;
+- priority entities from `RANKING_PRIORITY_ENTITIES`, such as `openai`, `sol`, `terra` and `luna`;
+- launch signals from `RANKING_LAUNCH_KEYWORDS`, such as `announces`, `launch`, `release` and `preview`.
+
+This makes official launch news, for example an OpenAI announcement about Sol, Terra and Luna, rank above generic posts with many broad technology keywords.
 
 ## Local AI with Ollama
 

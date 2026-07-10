@@ -7,7 +7,9 @@ import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.preferences.PersonalPreference;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -65,5 +67,36 @@ class RankingServiceTest {
 				Instant.parse("2026-06-29T10:00:00Z"));
 
 		assertThat(service.score(preferred)).isGreaterThan(service.score(excluded));
+	}
+
+	@Test
+	void prioritizesRecentOfficialLaunchNewsAboutPriorityEntities() {
+		var clock = Clock.fixed(Instant.parse("2026-06-26T12:00:00Z"), ZoneOffset.UTC);
+		var service = new RankingService(
+				new RankingProperties(
+						List.of("ai", "java", "backend", "cloud"),
+						List.of("openai.com"),
+						List.of("openai", "gpt", "sol", "terra", "luna"),
+						List.of("announces", "launch", "launches", "release", "preview")),
+				null,
+				clock);
+		var openAiLaunch = new CollectedArticle(
+				"https://openai.com/news/rss.xml",
+				"openai-sol-terra-luna",
+				"OpenAI announces Sol, Terra and Luna for tomorrow",
+				"https://openai.com/index/previewing-gpt-5-6-sol/",
+				"Official preview of Sol, Terra and Luna, a launch that matters for AI developers.",
+				Instant.parse("2026-06-26T10:00:00Z"));
+		var genericKeywordMatch = new CollectedArticle(
+				"community-blog",
+				"generic-ai-java-cloud",
+				"Java AI backend cloud patterns",
+				"https://example.com/generic-ai-java-cloud",
+				"General notes about Java, AI, backend, cloud and Redis teams.",
+				Instant.parse("2026-06-26T09:00:00Z"));
+
+		assertThat(service.rank(List.of(genericKeywordMatch, openAiLaunch)).getFirst().article())
+				.isEqualTo(openAiLaunch);
+		assertThat(service.score(openAiLaunch)).isGreaterThan(service.score(genericKeywordMatch));
 	}
 }

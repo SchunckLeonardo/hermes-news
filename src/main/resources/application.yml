@@ -37,13 +37,16 @@ app:
     digest-check-cron: ${APP_DIGEST_CHECK_CRON:0 * * * * *}
     zone: ${APP_SCHEDULER_ZONE:America/Sao_Paulo}
   rss:
-    feeds: ${RSS_FEEDS:https://www.infoq.com/feed/,https://hnrss.org/frontpage}
+    feeds: ${RSS_FEEDS:https://openai.com/news/rss.xml,https://www.infoq.com/feed/,https://hnrss.org/frontpage}
     max-response-size: ${RSS_MAX_RESPONSE_SIZE:2MB}
   hacker-news:
     base-url: ${HACKER_NEWS_BASE_URL:https://hacker-news.firebaseio.com/v0}
     max-items: ${HACKER_NEWS_MAX_ITEMS:10}
   ranking:
     keywords: ${RANKING_KEYWORDS:ai,artificial intelligence,java,spring,backend,cloud,devops,security,postgres,redis}
+    official-sources: ${RANKING_OFFICIAL_SOURCES:openai.com,anthropic.com,deepmind.google,aws.amazon.com,cloud.google.com,azure.microsoft.com,spring.io,openjdk.org,kubernetes.io}
+    priority-entities: ${RANKING_PRIORITY_ENTITIES:openai,chatgpt,gpt,sol,terra,luna,anthropic,claude,google deepmind,gemini,java,spring,kubernetes,aws,azure,gcp}
+    launch-keywords: ${RANKING_LAUNCH_KEYWORDS:announces,announce,launch,launches,release,releases,preview,unveil,unveils,introducing,available,generally available}
   evolution:
     base-url: ${EVOLUTION_BASE_URL:}
     api-key: ${EVOLUTION_API_KEY:}

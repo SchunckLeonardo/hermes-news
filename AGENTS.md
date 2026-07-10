@@ -39,6 +39,10 @@ Follow red-green-refactor for every change. Write or update the failing test fir
 
 Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile uses H2 in PostgreSQL mode with Flyway enabled and `AI_PROVIDER=mock`. Do not require live RSS, Hacker News, Ollama, LLM or Evolution API access during tests; mock external boundaries.
 
+## Ranking Guidelines
+
+Ranking v2 combines broad keywords, personal preferences, official source boosts, priority entities, launch keywords and recency. Keep regression coverage for official launch news like an OpenAI Sol/Terra/Luna announcement so important recent official news does not get buried by generic keyword-heavy posts.
+
 ## Digest Message Format
 
 The WhatsApp digest must stay easy to scan: short `*Hermes News*` header, story count, only non-empty sections, numbered items, `Por que importa`, `Fonte`, and `Link`. Do not expose internal ranking scores in the delivered message. Keep the Ollama prompt and local fallback formatter aligned.
