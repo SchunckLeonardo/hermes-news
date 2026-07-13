@@ -47,6 +47,12 @@ app:
     official-sources: ${RANKING_OFFICIAL_SOURCES:openai.com,anthropic.com,deepmind.google,aws.amazon.com,cloud.google.com,azure.microsoft.com,spring.io,openjdk.org,kubernetes.io}
     priority-entities: ${RANKING_PRIORITY_ENTITIES:openai,chatgpt,gpt,sol,terra,luna,anthropic,claude,google deepmind,gemini,java,spring,kubernetes,aws,azure,gcp}
     launch-keywords: ${RANKING_LAUNCH_KEYWORDS:announces,announce,launch,launches,release,releases,preview,unveil,unveils,introducing,available,generally available}
+  watchlist:
+    scan-cron: ${WATCHLIST_SCAN_CRON:0 */10 * * * *}
+    default-cooldown: ${WATCHLIST_DEFAULT_COOLDOWN:6h}
+    max-article-age: ${WATCHLIST_MAX_ARTICLE_AGE:24h}
+    min-score: ${WATCHLIST_MIN_SCORE:20}
+    max-alerts-per-run: ${WATCHLIST_MAX_ALERTS_PER_RUN:2}
   evolution:
     base-url: ${EVOLUTION_BASE_URL:}
     api-key: ${EVOLUTION_API_KEY:}

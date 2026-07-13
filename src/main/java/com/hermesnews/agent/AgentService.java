@@ -1,12 +1,15 @@
 package com.hermesnews.agent;
 
 import com.hermesnews.digest.DailyDigestService;
+import com.hermesnews.feedback.FeedbackService;
+import com.hermesnews.feedback.FeedbackType;
 import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
 import com.hermesnews.news.NewsSourceTestResponse;
 import com.hermesnews.news.RssNewsCollector;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
+import com.hermesnews.watchlist.WatchlistService;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -26,6 +29,9 @@ public class AgentService {
 			- responder perguntas simples sobre o proprio agente;
 			- atualizar preferencias pessoais de temas, fontes, quantidade de noticias, horario preferido e idioma;
 			- usar as preferencias salvas para priorizar temas e fontes no ranking;
+			- registrar feedback positivo ou negativo sobre itens do ultimo digest;
+			- explicar os sinais que fizeram uma noticia entrar no ranking;
+			- monitorar termos e enviar alertas urgentes com cooldown;
 			- listar, testar, ativar, desativar e cadastrar fontes RSS publicas.
 			""".trim();
 
@@ -34,18 +40,24 @@ public class AgentService {
 	private final PreferenceService preferenceService;
 	private final NewsSourceService newsSourceService;
 	private final RssNewsCollector rssNewsCollector;
+	private final FeedbackService feedbackService;
+	private final WatchlistService watchlistService;
 
 	public AgentService(
 			AgentInterpreter interpreter,
 			DailyDigestService dailyDigestService,
 			PreferenceService preferenceService,
 			NewsSourceService newsSourceService,
-			RssNewsCollector rssNewsCollector) {
+			RssNewsCollector rssNewsCollector,
+			FeedbackService feedbackService,
+			WatchlistService watchlistService) {
 		this.interpreter = interpreter;
 		this.dailyDigestService = dailyDigestService;
 		this.preferenceService = preferenceService;
 		this.newsSourceService = newsSourceService;
 		this.rssNewsCollector = rssNewsCollector;
+		this.feedbackService = feedbackService;
+		this.watchlistService = watchlistService;
 	}
 
 	public String handleIncomingText(String message) {
@@ -61,6 +73,14 @@ public class AgentService {
 		}
 		if (asksForSources(normalizedMessage)) {
 			return sourcesMessage();
+		}
+		var feedbackResponse = handleFeedbackOrExplanation(normalizedMessage);
+		if (hasText(feedbackResponse)) {
+			return feedbackResponse;
+		}
+		var watchlistResponse = handleWatchlistCommand(normalizedMessage);
+		if (hasText(watchlistResponse)) {
+			return watchlistResponse;
 		}
 		var sourceResponse = handleSourceCommand(normalizedMessage);
 		if (hasText(sourceResponse)) {
@@ -85,6 +105,80 @@ public class AgentService {
 			return CAPABILITIES_MESSAGE;
 		}
 		return hasText(decision.response()) ? decision.response().trim() : "Como posso ajudar com suas noticias de tecnologia?";
+	}
+
+	private String handleWatchlistCommand(String message) {
+		var normalized = normalize(message);
+		try {
+			if (containsAny(normalized,
+					"o que voce esta monitorando",
+					"listar monitoramentos",
+					"monitoramentos ativos",
+					"minha watchlist")) {
+				var entries = watchlistService.activeEntries();
+				if (entries.isEmpty()) {
+					return "Nenhum monitoramento urgente esta ativo.";
+				}
+				var lines = new ArrayList<String>();
+				lines.add("Monitoramentos ativos:");
+				for (var entry : entries) {
+					lines.add("- %s (cooldown: %d horas)".formatted(
+							entry.getTerm(),
+							Math.max(1, entry.getCooldownMinutes() / 60)));
+				}
+				return String.join("\n", lines);
+			}
+			for (String prefix : List.of("pare de monitorar ", "remova da watchlist ", "remover da watchlist ")) {
+				if (normalized.startsWith(prefix)) {
+					var term = message.substring(prefix.length()).trim();
+					var entry = watchlistService.remove(term);
+					return "Monitoramento desativado: " + entry.getTerm();
+				}
+			}
+			for (String prefix : List.of("monitore ", "monitorar ", "acompanhe ", "adicione a watchlist ")) {
+				if (normalized.startsWith(prefix)) {
+					var term = message.substring(prefix.length()).trim();
+					var entry = watchlistService.add(term);
+					return "Monitoramento ativado: %s (cooldown: %d horas).".formatted(
+							entry.getTerm(),
+							Math.max(1, entry.getCooldownMinutes() / 60));
+				}
+			}
+			return "";
+		}
+		catch (IllegalArgumentException exception) {
+			return "Nao consegui atualizar esse monitoramento.";
+		}
+	}
+
+	private String handleFeedbackOrExplanation(String message) {
+		var normalized = normalize(message);
+		var position = firstInteger(normalized);
+		if (position == null) {
+			return "";
+		}
+		try {
+			if (containsAny(normalized, "por que", "porque")
+					&& containsAny(normalized, "noticia", "selecionada", "ranking")) {
+				var explanation = feedbackService.explainLatest(position);
+				return "*%s*\nPontuacao: %d\nMotivos: %s".formatted(
+						explanation.articleTitle(),
+						explanation.score(),
+						explanation.explanation());
+			}
+			if (containsAny(normalized, "nao gostei", "irrelevante", "nao curti")) {
+				var receipt = feedbackService.recordLatest(position, FeedbackType.NEGATIVE);
+				return "Feedback negativo registrado para: " + receipt.articleTitle();
+			}
+			if (containsAny(normalized, "gostei", "curti", "relevante")) {
+				var receipt = feedbackService.recordLatest(position, FeedbackType.POSITIVE);
+				return "Feedback positivo registrado para: " + receipt.articleTitle();
+			}
+			return "";
+		}
+		catch (IllegalArgumentException exception) {
+			return "Nao encontrei essa noticia no ultimo digest.";
+		}
 	}
 
 	private String currentPreferencesMessage() {
@@ -398,6 +492,21 @@ public class AgentService {
 			}
 			catch (NumberFormatException ignored) {
 				continue;
+			}
+		}
+		return null;
+	}
+
+	private static Integer firstInteger(String value) {
+		for (String token : value.split("[^0-9]+")) {
+			if (token.isBlank()) {
+				continue;
+			}
+			try {
+				return Integer.parseInt(token);
+			}
+			catch (NumberFormatException ignored) {
+				return null;
 			}
 		}
 		return null;

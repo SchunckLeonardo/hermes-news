@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import com.hermesnews.ai.AiSummaryService;
@@ -163,5 +164,57 @@ class DailyDigestServiceTest {
 		assertThat(result.articleCount()).isZero();
 		verify(articleRepository, never()).save(any(Article.class));
 		verify(digestItemRepository, never()).save(any(DigestItem.class));
+	}
+
+	@Test
+	void sendsOnlyOneRepresentativeWhenDifferentUrlsDescribeTheSameEvent() {
+		when(preferenceService.current()).thenReturn(PersonalPreference.defaults());
+		var official = new CollectedArticle(
+				"OpenAI",
+				"official",
+				"OpenAI launches Sol, Terra and Luna models",
+				"https://openai.com/sol-terra-luna",
+				"Official model launch",
+				Instant.parse("2026-07-13T10:00:00Z"));
+		var secondary = new CollectedArticle(
+				"Tech blog",
+				"secondary",
+				"Sol, Terra and Luna unveiled by OpenAI",
+				"https://example.com/openai-models",
+				"Coverage of the same model launch",
+				Instant.parse("2026-07-13T09:55:00Z"));
+		when(collector.collect()).thenReturn(List.of(official, secondary));
+		when(articleRepository.existsByUrl(official.url())).thenReturn(false);
+		when(articleRepository.existsByUrl(secondary.url())).thenReturn(false);
+		when(articleRepository.save(any(Article.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(digestRepository.save(any(Digest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(digestItemRepository.save(any(DigestItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(aiSummaryService.summarize(anyList())).thenReturn("digest message");
+		when(whatsAppService.sendText("digest message")).thenReturn(WhatsAppSendResult.sent());
+		var service = new DailyDigestService(
+				List.of(collector),
+				articleRepository,
+				digestRepository,
+				digestItemRepository,
+				new RankingService(new RankingProperties(
+						List.of("ai"),
+						List.of("openai.com"),
+						List.of("openai", "sol", "terra", "luna"),
+						List.of("launches", "unveiled"))),
+				aiSummaryService,
+				whatsAppService,
+				preferenceService);
+
+		var result = service.sendDailyDigest();
+
+		assertThat(result.articleCount()).isEqualTo(1);
+		verify(articleRepository, times(1)).save(any(Article.class));
+		@SuppressWarnings("unchecked")
+		ArgumentCaptor<List<RankedArticle>> captor = ArgumentCaptor.forClass(List.class);
+		verify(aiSummaryService).summarize(captor.capture());
+		assertThat(captor.getValue()).singleElement().satisfies(ranked -> {
+			assertThat(ranked.article().url()).isEqualTo(official.url());
+			assertThat(ranked.eventKey()).isNotBlank();
+		});
 	}
 }

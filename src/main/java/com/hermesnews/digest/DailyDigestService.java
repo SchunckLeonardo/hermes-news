@@ -7,6 +7,7 @@ import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.ranking.RankedArticle;
+import com.hermesnews.ranking.SemanticEventClusterer;
 import com.hermesnews.ranking.RankingService;
 import com.hermesnews.whatsapp.WhatsAppService;
 import jakarta.transaction.Transactional;
@@ -15,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,6 +32,29 @@ public class DailyDigestService {
 	private final AiSummaryService aiSummaryService;
 	private final WhatsAppService whatsAppService;
 	private final PreferenceService preferenceService;
+	private final SemanticEventClusterer eventClusterer;
+
+	@Autowired
+	public DailyDigestService(
+			List<NewsCollector> collectors,
+			ArticleRepository articleRepository,
+			DigestRepository digestRepository,
+			DigestItemRepository digestItemRepository,
+			RankingService rankingService,
+			AiSummaryService aiSummaryService,
+			WhatsAppService whatsAppService,
+			PreferenceService preferenceService,
+			SemanticEventClusterer eventClusterer) {
+		this.collectors = collectors;
+		this.articleRepository = articleRepository;
+		this.digestRepository = digestRepository;
+		this.digestItemRepository = digestItemRepository;
+		this.rankingService = rankingService;
+		this.aiSummaryService = aiSummaryService;
+		this.whatsAppService = whatsAppService;
+		this.preferenceService = preferenceService;
+		this.eventClusterer = eventClusterer;
+	}
 
 	public DailyDigestService(
 			List<NewsCollector> collectors,
@@ -40,14 +65,16 @@ public class DailyDigestService {
 			AiSummaryService aiSummaryService,
 			WhatsAppService whatsAppService,
 			PreferenceService preferenceService) {
-		this.collectors = collectors;
-		this.articleRepository = articleRepository;
-		this.digestRepository = digestRepository;
-		this.digestItemRepository = digestItemRepository;
-		this.rankingService = rankingService;
-		this.aiSummaryService = aiSummaryService;
-		this.whatsAppService = whatsAppService;
-		this.preferenceService = preferenceService;
+		this(
+				collectors,
+				articleRepository,
+				digestRepository,
+				digestItemRepository,
+				rankingService,
+				aiSummaryService,
+				whatsAppService,
+				preferenceService,
+				new SemanticEventClusterer());
 	}
 
 	@Transactional
@@ -57,7 +84,7 @@ public class DailyDigestService {
 				.filter(article -> !articleRepository.existsByUrl(article.url()))
 				.toList();
 		var newsLimit = Math.max(1, preferenceService.current().newsLimit());
-		var ranked = rankingService.rank(newArticles).stream()
+		var ranked = eventClusterer.cluster(rankingService.rank(newArticles)).stream()
 				.limit(newsLimit)
 				.toList();
 		var savedArticles = new ArrayList<Article>();
@@ -68,7 +95,14 @@ public class DailyDigestService {
 		var message = aiSummaryService.summarize(ranked);
 		var digest = digestRepository.save(Digest.created(message));
 		for (int index = 0; index < savedArticles.size(); index++) {
-			digestItemRepository.save(new DigestItem(digest, savedArticles.get(index), ranked.get(index).score(), index + 1));
+			var rankedArticle = ranked.get(index);
+			digestItemRepository.save(new DigestItem(
+					digest,
+					savedArticles.get(index),
+					rankedArticle.score(),
+					index + 1,
+					rankedArticle.explanation(),
+					rankedArticle.eventKey()));
 		}
 		var sendResult = whatsAppService.sendText(message);
 		digest.applySendStatus(sendResult.status());

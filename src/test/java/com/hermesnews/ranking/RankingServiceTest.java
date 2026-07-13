@@ -99,4 +99,37 @@ class RankingServiceTest {
 				.isEqualTo(openAiLaunch);
 		assertThat(service.score(openAiLaunch)).isGreaterThan(service.score(genericKeywordMatch));
 	}
+
+	@Test
+	void explainsRankingSignalsIncludingPersistedFeedback() {
+		var clock = Clock.fixed(Instant.parse("2026-07-13T12:00:00Z"), ZoneOffset.UTC);
+		RankingFeedbackProvider feedbackProvider = article -> new FeedbackAdjustment(
+				5,
+				"Feedback positivo em noticias semelhantes");
+		var service = new RankingService(
+				new RankingProperties(
+						List.of("ai"),
+						List.of("openai.com"),
+						List.of("openai"),
+						List.of("launches")),
+				null,
+				clock,
+				feedbackProvider);
+		var article = new CollectedArticle(
+				"OpenAI",
+				"launch-1",
+				"OpenAI launches a new AI model",
+				"https://openai.com/news/model",
+				"Official launch for developers",
+				Instant.parse("2026-07-13T10:00:00Z"));
+
+		var ranked = service.rank(List.of(article)).getFirst();
+
+		assertThat(ranked.score()).isPositive();
+		assertThat(ranked.explanation())
+				.contains("Fonte oficial")
+				.contains("Publicada nas ultimas 24 horas")
+				.contains("Feedback positivo em noticias semelhantes");
+		assertThat(ranked.reasons()).extracting(RankingReason::points).contains(12, 8, 5);
+	}
 }

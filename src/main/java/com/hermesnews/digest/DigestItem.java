@@ -34,14 +34,32 @@ public class DigestItem {
 	@Column(nullable = false)
 	private int rankOrder;
 
+	@Column(name = "ranking_explanation", columnDefinition = "text")
+	private String rankingExplanation;
+
+	@Column(name = "event_key", length = 300)
+	private String eventKey;
+
 	protected DigestItem() {
 	}
 
 	public DigestItem(Digest digest, Article article, int rankScore, int rankOrder) {
+		this(digest, article, rankScore, rankOrder, "", "");
+	}
+
+	public DigestItem(
+			Digest digest,
+			Article article,
+			int rankScore,
+			int rankOrder,
+			String rankingExplanation,
+			String eventKey) {
 		this.digest = digest;
 		this.article = article;
 		this.rankScore = rankScore;
 		this.rankOrder = rankOrder;
+		this.rankingExplanation = rankingExplanation;
+		this.eventKey = eventKey;
 	}
 
 	public UUID getId() {
@@ -62,5 +80,15 @@ public class DigestItem {
 
 	public int getRankOrder() {
 		return rankOrder;
+	}
+
+	public String getRankingExplanation() {
+		return rankingExplanation == null || rankingExplanation.isBlank()
+				? "Sem sinais adicionais de ranking."
+				: rankingExplanation;
+	}
+
+	public String getEventKey() {
+		return eventKey;
 	}
 }

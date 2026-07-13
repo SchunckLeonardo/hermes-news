@@ -7,6 +7,10 @@ import static org.mockito.Mockito.when;
 
 import com.hermesnews.digest.DailyDigestResult;
 import com.hermesnews.digest.DailyDigestService;
+import com.hermesnews.feedback.DigestItemExplanation;
+import com.hermesnews.feedback.FeedbackReceipt;
+import com.hermesnews.feedback.FeedbackService;
+import com.hermesnews.feedback.FeedbackType;
 import com.hermesnews.news.NewsSource;
 import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
@@ -17,6 +21,9 @@ import com.hermesnews.preferences.PersonalPreference;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
 import com.hermesnews.whatsapp.WhatsAppSendStatus;
+import com.hermesnews.watchlist.WatchlistEntry;
+import com.hermesnews.watchlist.WatchlistService;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -41,6 +48,12 @@ class AgentServiceTest {
 
 	@Mock
 	private RssNewsCollector rssNewsCollector;
+
+	@Mock
+	private FeedbackService feedbackService;
+
+	@Mock
+	private WatchlistService watchlistService;
 
 	@Test
 	void runsDailyDigestDeterministicallyWithoutCallingAi() {
@@ -245,7 +258,72 @@ class AgentServiceTest {
 		verifyNoInteractions(dailyDigestService, preferenceService, newsSourceService);
 	}
 
+	@Test
+	void recordsPositiveFeedbackForTheLatestDigestWithoutCallingAi() {
+		when(feedbackService.recordLatest(2, FeedbackType.POSITIVE))
+				.thenReturn(new FeedbackReceipt("OpenAI launches a new model", FeedbackType.POSITIVE));
+		var service = service();
+
+		var response = service.handleIncomingText("gostei da noticia 2");
+
+		assertThat(response).contains("Feedback positivo registrado").contains("OpenAI launches a new model");
+		verify(feedbackService).recordLatest(2, FeedbackType.POSITIVE);
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
+	void explainsWhyAnItemWasSelectedWithoutCallingAi() {
+		when(feedbackService.explainLatest(3)).thenReturn(new DigestItemExplanation(
+				"Java 25 released",
+				31,
+				"Fonte oficial (+12); Temas preferidos (+5)"));
+		var service = service();
+
+		var response = service.handleIncomingText("por que a noticia 3 foi selecionada?");
+
+		assertThat(response)
+				.contains("Java 25 released")
+				.contains("31")
+				.contains("Fonte oficial")
+				.contains("Temas preferidos");
+		verify(feedbackService).explainLatest(3);
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
+	void addsAWatchlistTermWithoutCallingAi() {
+		when(watchlistService.add("OpenAI")).thenReturn(new WatchlistEntry("OpenAI", Duration.ofHours(6)));
+		var service = service();
+
+		var response = service.handleIncomingText("monitore OpenAI");
+
+		assertThat(response).contains("Monitoramento ativado").contains("openai").contains("6 horas");
+		verify(watchlistService).add("OpenAI");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
+	void listsActiveWatchlistTermsWithoutCallingAi() {
+		when(watchlistService.activeEntries()).thenReturn(List.of(
+				new WatchlistEntry("openai", Duration.ofHours(6)),
+				new WatchlistEntry("java", Duration.ofHours(3))));
+		var service = service();
+
+		var response = service.handleIncomingText("o que voce esta monitorando?");
+
+		assertThat(response).contains("Monitoramentos ativos:").contains("openai").contains("java");
+		verify(watchlistService).activeEntries();
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
 	private AgentService service() {
-		return new AgentService(interpreter, dailyDigestService, preferenceService, newsSourceService, rssNewsCollector);
+		return new AgentService(
+				interpreter,
+				dailyDigestService,
+				preferenceService,
+				newsSourceService,
+				rssNewsCollector,
+				feedbackService,
+				watchlistService);
 	}
 }

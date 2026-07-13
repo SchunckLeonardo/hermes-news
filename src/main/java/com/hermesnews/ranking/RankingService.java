@@ -30,26 +30,40 @@ public class RankingService {
 	private final List<String> launchKeywords;
 	private final PreferenceService preferenceService;
 	private final Clock clock;
+	private final RankingFeedbackProvider feedbackProvider;
 
 	public RankingService(RankingProperties properties) {
-		this(properties, null, Clock.systemUTC());
+		this(properties, null, Clock.systemUTC(), article -> FeedbackAdjustment.none());
 	}
 
 	@Autowired
-	public RankingService(RankingProperties properties, PreferenceService preferenceService, Clock clock) {
+	public RankingService(
+			RankingProperties properties,
+			PreferenceService preferenceService,
+			Clock clock,
+			RankingFeedbackProvider feedbackProvider) {
 		this.keywords = normalizeList(properties.keywords());
 		this.officialSources = normalizeList(properties.officialSources());
 		this.priorityEntities = normalizeList(properties.priorityEntities());
 		this.launchKeywords = normalizeList(properties.launchKeywords());
 		this.preferenceService = preferenceService;
 		this.clock = clock == null ? Clock.systemUTC() : clock;
+		this.feedbackProvider = feedbackProvider == null ? article -> FeedbackAdjustment.none() : feedbackProvider;
 	}
 
 	public RankingService(RankingProperties properties, PreferenceService preferenceService) {
-		this(properties, preferenceService, Clock.systemUTC());
+		this(properties, preferenceService, Clock.systemUTC(), article -> FeedbackAdjustment.none());
+	}
+
+	public RankingService(RankingProperties properties, PreferenceService preferenceService, Clock clock) {
+		this(properties, preferenceService, clock, article -> FeedbackAdjustment.none());
 	}
 
 	public int score(CollectedArticle article) {
+		return evaluate(article).score();
+	}
+
+	private RankedArticle evaluate(CollectedArticle article) {
 		var title = normalize(article.title());
 		var summary = normalize(article.summary());
 		var source = normalize(article.sourceName());
@@ -58,65 +72,96 @@ public class RankingService {
 		var preferredThemes = preferences == null ? List.<String>of() : preferences.themes();
 		var excludedThemes = preferences == null ? Set.<String>of() : Set.copyOf(preferences.excludedThemes());
 		var preferredSources = preferences == null ? List.<String>of() : preferences.sources();
+		var reasons = new java.util.ArrayList<RankingReason>();
 		var score = 0;
+		var keywordScore = 0;
 		for (String keyword : keywords) {
 			if (containsSignal(title, keyword)) {
-				score += 3;
+				keywordScore += 3;
 			}
 			if (containsSignal(summary, keyword)) {
-				score += 1;
+				keywordScore += 1;
 			}
 		}
+		score += addReason(reasons, "keywords", keywordScore, "Palavras-chave relevantes");
 		if (matchesAny(source + " " + url, officialSources)) {
-			score += OFFICIAL_SOURCE_BONUS;
+			score += addReason(reasons, "official-source", OFFICIAL_SOURCE_BONUS, "Fonte oficial");
 		}
+		var priorityScore = 0;
 		for (String entity : priorityEntities) {
 			if (containsSignal(title, entity)) {
-				score += PRIORITY_TITLE_BONUS;
+				priorityScore += PRIORITY_TITLE_BONUS;
 			}
 			if (containsSignal(summary, entity)) {
-				score += PRIORITY_SUMMARY_BONUS;
+				priorityScore += PRIORITY_SUMMARY_BONUS;
 			}
 		}
+		score += addReason(reasons, "priority-entity", priorityScore, "Entidades prioritarias");
+		var launchScore = 0;
 		for (String launchKeyword : launchKeywords) {
 			if (containsSignal(title, launchKeyword)) {
-				score += LAUNCH_TITLE_BONUS;
+				launchScore += LAUNCH_TITLE_BONUS;
 			}
 			if (containsSignal(summary, launchKeyword)) {
-				score += LAUNCH_SUMMARY_BONUS;
+				launchScore += LAUNCH_SUMMARY_BONUS;
 			}
 		}
-		score += recencyBonus(article.publishedAt());
+		score += addReason(reasons, "launch", launchScore, "Sinal de anuncio ou lancamento");
+		var recency = recencyBonus(article.publishedAt());
+		var recencyDescription = switch (recency) {
+			case RECENT_24H_BONUS -> "Publicada nas ultimas 24 horas";
+			case RECENT_72H_BONUS -> "Publicada nas ultimas 72 horas";
+			case RECENT_7D_BONUS -> "Publicada nos ultimos 7 dias";
+			default -> "Recencia";
+		};
+		score += addReason(reasons, "recency", recency, recencyDescription);
+		var preferredThemeScore = 0;
 		for (String theme : preferredThemes) {
 			if (title.contains(theme)) {
-				score += 5;
+				preferredThemeScore += 5;
 			}
 			if (summary.contains(theme)) {
-				score += 2;
+				preferredThemeScore += 2;
 			}
 		}
+		score += addReason(reasons, "preferred-theme", preferredThemeScore, "Temas preferidos");
+		var excludedThemeScore = 0;
 		for (String excluded : excludedThemes) {
 			if (title.contains(excluded)) {
-				score -= 5;
+				excludedThemeScore -= 5;
 			}
 			if (summary.contains(excluded)) {
-				score -= 2;
+				excludedThemeScore -= 2;
 			}
 		}
+		score += addReason(reasons, "excluded-theme", excludedThemeScore, "Temas com menor prioridade");
+		var preferredSourceScore = 0;
 		for (String preferredSource : preferredSources) {
 			if (source.contains(preferredSource)) {
-				score += 4;
+				preferredSourceScore += 4;
 			}
 		}
-		return score;
+		score += addReason(reasons, "preferred-source", preferredSourceScore, "Fonte preferida");
+		var feedback = feedbackProvider.adjustmentFor(article);
+		if (feedback != null) {
+			score += addReason(reasons, "feedback", feedback.points(), feedback.reason());
+		}
+		return new RankedArticle(article, score, reasons);
 	}
 
 	public List<RankedArticle> rank(List<CollectedArticle> articles) {
 		return articles.stream()
-				.map(article -> new RankedArticle(article, score(article)))
+				.map(this::evaluate)
 				.sorted(Comparator.comparingInt(RankedArticle::score).reversed()
 						.thenComparing(ranked -> ranked.article().publishedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
 				.toList();
+	}
+
+	private static int addReason(List<RankingReason> reasons, String code, int points, String description) {
+		if (points != 0 && description != null && !description.isBlank()) {
+			reasons.add(new RankingReason(code, points, description));
+		}
+		return points;
 	}
 
 	private int recencyBonus(Instant publishedAt) {
