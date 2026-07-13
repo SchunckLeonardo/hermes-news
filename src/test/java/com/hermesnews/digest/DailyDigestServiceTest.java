@@ -13,12 +13,14 @@ import com.hermesnews.news.Article;
 import com.hermesnews.news.ArticleRepository;
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.observability.HermesMetrics;
 import com.hermesnews.preferences.PersonalPreference;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
 import com.hermesnews.ranking.RankingProperties;
 import com.hermesnews.ranking.RankingService;
 import com.hermesnews.ranking.RankedArticle;
+import com.hermesnews.ranking.SemanticEventClusterer;
 import com.hermesnews.whatsapp.WhatsAppSendResult;
 import com.hermesnews.whatsapp.WhatsAppSendStatus;
 import com.hermesnews.whatsapp.WhatsAppService;
@@ -54,6 +56,9 @@ class DailyDigestServiceTest {
 	@Mock
 	private PreferenceService preferenceService;
 
+	@Mock
+	private HermesMetrics metrics;
+
 	@Test
 	void collectsRanksPersistsSummarizesAndSendsDigest() {
 		when(preferenceService.current()).thenReturn(PersonalPreference.defaults());
@@ -79,13 +84,16 @@ class DailyDigestServiceTest {
 				new RankingService(new RankingProperties(List.of("ai", "java", "backend", "cloud"))),
 				aiSummaryService,
 				whatsAppService,
-				preferenceService);
+				preferenceService,
+				new SemanticEventClusterer(),
+				metrics);
 
 		var result = service.sendDailyDigest();
 
 		assertThat(result.articleCount()).isEqualTo(1);
 		assertThat(result.whatsAppStatus()).isEqualTo(WhatsAppSendStatus.SENT);
 		verify(digestItemRepository).save(any(DigestItem.class));
+		verify(metrics).recordDigest(1, 1, WhatsAppSendStatus.SENT);
 	}
 
 	@Test

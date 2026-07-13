@@ -91,8 +91,9 @@ public class OllamaAiSummaryService implements AiSummaryService {
 				Fonte: nome da fonte
 				Link: URL original
 
-				Organize em secoes IA, Java, Backend, Cloud e Outras, mas mostre apenas secoes com noticias.
-				Nao mostre score tecnico. Nao adicione introducoes, conclusoes longas ou comandos que o agente nao suporta.
+					Organize em secoes IA, Java, Backend, Cloud e Outras, mas mostre apenas secoes com noticias.
+					preserve exatamente a ordem e a numeracao dos artigos recebidos, mesmo quando mudar de secao.
+					Nao mostre score tecnico. Nao adicione introducoes, conclusoes longas ou comandos que o agente nao suporta.
 				""";
 	}
 

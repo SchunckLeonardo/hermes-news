@@ -11,6 +11,10 @@ import com.hermesnews.feedback.DigestItemExplanation;
 import com.hermesnews.feedback.FeedbackReceipt;
 import com.hermesnews.feedback.FeedbackService;
 import com.hermesnews.feedback.FeedbackType;
+import com.hermesnews.history.HistorySearchResult;
+import com.hermesnews.history.NewsHistoryService;
+import com.hermesnews.news.Article;
+import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsSource;
 import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
@@ -24,6 +28,7 @@ import com.hermesnews.whatsapp.WhatsAppSendStatus;
 import com.hermesnews.watchlist.WatchlistEntry;
 import com.hermesnews.watchlist.WatchlistService;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -54,6 +59,9 @@ class AgentServiceTest {
 
 	@Mock
 	private WatchlistService watchlistService;
+
+	@Mock
+	private NewsHistoryService newsHistoryService;
 
 	@Test
 	void runsDailyDigestDeterministicallyWithoutCallingAi() {
@@ -272,6 +280,19 @@ class AgentServiceTest {
 	}
 
 	@Test
+	void recordsNegativeFeedbackForTheLatestDigestWithoutCallingAi() {
+		when(feedbackService.recordLatest(4, FeedbackType.NEGATIVE))
+				.thenReturn(new FeedbackReceipt("Frontend framework update", FeedbackType.NEGATIVE));
+		var service = service();
+
+		var response = service.handleIncomingText("nao gostei da noticia 4");
+
+		assertThat(response).contains("Feedback negativo registrado").contains("Frontend framework update");
+		verify(feedbackService).recordLatest(4, FeedbackType.NEGATIVE);
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
 	void explainsWhyAnItemWasSelectedWithoutCallingAi() {
 		when(feedbackService.explainLatest(3)).thenReturn(new DigestItemExplanation(
 				"Java 25 released",
@@ -316,6 +337,44 @@ class AgentServiceTest {
 		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
 	}
 
+	@Test
+	void removesAWatchlistTermWithoutCallingAi() {
+		var entry = new WatchlistEntry("openai", Duration.ofHours(6));
+		entry.disable();
+		when(watchlistService.remove("OpenAI")).thenReturn(entry);
+		var service = service();
+
+		var response = service.handleIncomingText("pare de monitorar OpenAI");
+
+		assertThat(response).isEqualTo("Monitoramento desativado: openai");
+		verify(watchlistService).remove("OpenAI");
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
+	@Test
+	void searchesNewsHistoryForTheCurrentWeekWithoutCallingAi() {
+		var article = Article.from(new CollectedArticle(
+				"OpenAI",
+				"history-1",
+				"OpenAI launches Sol",
+				"https://openai.com/sol",
+				"Official launch",
+				Instant.parse("2026-07-12T10:00:00Z")), 40);
+		when(newsHistoryService.search("OpenAI", Duration.ofDays(7), 5))
+				.thenReturn(new HistorySearchResult("OpenAI", Instant.parse("2026-07-06T12:00:00Z"), List.of(article)));
+		var service = service();
+
+		var response = service.handleIncomingText("o que saiu sobre OpenAI esta semana?");
+
+		assertThat(response)
+				.contains("Historico: OpenAI")
+				.contains("OpenAI launches Sol")
+				.contains("OpenAI")
+				.contains("https://openai.com/sol");
+		verify(newsHistoryService).search("OpenAI", Duration.ofDays(7), 5);
+		verifyNoInteractions(interpreter, dailyDigestService, preferenceService, newsSourceService);
+	}
+
 	private AgentService service() {
 		return new AgentService(
 				interpreter,
@@ -324,6 +383,7 @@ class AgentServiceTest {
 				newsSourceService,
 				rssNewsCollector,
 				feedbackService,
-				watchlistService);
+				watchlistService,
+				newsHistoryService);
 	}
 }

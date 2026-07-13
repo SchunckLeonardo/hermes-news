@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.observability.HermesMetrics;
 import com.hermesnews.ranking.RankingProperties;
 import com.hermesnews.ranking.RankingService;
 import com.hermesnews.ranking.SemanticEventClusterer;
@@ -44,6 +45,9 @@ class WatchlistServiceTest {
 	@Mock
 	private WhatsAppService whatsAppService;
 
+	@Mock
+	private HermesMetrics metrics;
+
 	private WatchlistService service;
 
 	@BeforeEach
@@ -64,7 +68,8 @@ class WatchlistServiceTest {
 				alertRepository,
 				whatsAppService,
 				Clock.fixed(NOW, ZoneOffset.UTC),
-				new WatchlistProperties(Duration.ofHours(6), Duration.ofHours(24), 20, 2));
+				new WatchlistProperties(Duration.ofHours(6), Duration.ofHours(24), 20, 2),
+				metrics);
 	}
 
 	@Test
@@ -102,6 +107,7 @@ class WatchlistServiceTest {
 		assertThat(entry.getLastAlertedAt()).isEqualTo(NOW);
 		verify(alertRepository).save(any(UrgentAlert.class));
 		verify(whatsAppService).sendText(contains("*Hermes Alerta*"));
+		verify(metrics).recordWatchlistScan(1, 1);
 	}
 
 	@Test
@@ -115,5 +121,6 @@ class WatchlistServiceTest {
 		assertThat(result.alertCount()).isZero();
 		verify(collector, never()).collect();
 		verifyNoInteractions(whatsAppService, alertRepository);
+		verify(metrics).recordWatchlistScan(0, 0);
 	}
 }

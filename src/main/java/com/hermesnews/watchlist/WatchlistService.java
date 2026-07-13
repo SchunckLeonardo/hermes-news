@@ -2,6 +2,7 @@ package com.hermesnews.watchlist;
 
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.observability.HermesMetrics;
 import com.hermesnews.ranking.RankedArticle;
 import com.hermesnews.ranking.RankingService;
 import com.hermesnews.ranking.SemanticEventClusterer;
@@ -17,6 +18,7 @@ import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class WatchlistService {
@@ -31,6 +33,29 @@ public class WatchlistService {
 	private final WhatsAppService whatsAppService;
 	private final Clock clock;
 	private final WatchlistProperties properties;
+	private final HermesMetrics metrics;
+
+	@Autowired
+	public WatchlistService(
+			List<NewsCollector> collectors,
+			RankingService rankingService,
+			SemanticEventClusterer eventClusterer,
+			WatchlistEntryRepository entryRepository,
+			UrgentAlertRepository alertRepository,
+			WhatsAppService whatsAppService,
+			Clock clock,
+			WatchlistProperties properties,
+			HermesMetrics metrics) {
+		this.collectors = collectors;
+		this.rankingService = rankingService;
+		this.eventClusterer = eventClusterer;
+		this.entryRepository = entryRepository;
+		this.alertRepository = alertRepository;
+		this.whatsAppService = whatsAppService;
+		this.clock = clock;
+		this.properties = properties;
+		this.metrics = metrics;
+	}
 
 	public WatchlistService(
 			List<NewsCollector> collectors,
@@ -41,14 +66,16 @@ public class WatchlistService {
 			WhatsAppService whatsAppService,
 			Clock clock,
 			WatchlistProperties properties) {
-		this.collectors = collectors;
-		this.rankingService = rankingService;
-		this.eventClusterer = eventClusterer;
-		this.entryRepository = entryRepository;
-		this.alertRepository = alertRepository;
-		this.whatsAppService = whatsAppService;
-		this.clock = clock;
-		this.properties = properties;
+		this(
+				collectors,
+				rankingService,
+				eventClusterer,
+				entryRepository,
+				alertRepository,
+				whatsAppService,
+				clock,
+				properties,
+				HermesMetrics.noop());
 	}
 
 	@Transactional
@@ -82,6 +109,7 @@ public class WatchlistService {
 				.filter(entry -> entry.canAlert(now))
 				.toList();
 		if (availableEntries.isEmpty()) {
+			metrics.recordWatchlistScan(0, 0);
 			return new UrgentScanResult(0, 0);
 		}
 		var collected = collectAll().stream()
@@ -113,6 +141,7 @@ public class WatchlistService {
 				break;
 			}
 		}
+		metrics.recordWatchlistScan(candidates.size(), alerts);
 		return new UrgentScanResult(candidates.size(), alerts);
 	}
 

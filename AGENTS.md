@@ -5,13 +5,17 @@
 `hermes-news` is a Java 21 Spring Boot 3 modular monolith for a personal technology news assistant. Source code lives under `src/main/java/com/hermesnews` and is grouped by feature:
 
 - `news`: RSS/Atom and Hacker News collectors, HTML feed discovery, managed RSS sources, source health tracking, article entities and repositories.
-- `ranking`: keyword scoring for technology themes.
+- `ranking`: explainable scoring, feedback adjustments and deterministic semantic event clustering.
+- `feedback`: persisted positive/negative reactions and ranking explanations for latest-digest items.
 - `preferences`: persisted personal preferences for themes, excluded themes, sources, news count, preferred time and language.
+- `history`: bounded search over persisted articles.
+- `watchlist`: persisted urgent terms, cooldown state and alert history.
 - `ai`: Spring AI/Ollama summary abstraction with timeout and mock/local formatter fallback.
 - `agent`: conversational WhatsApp agent with deterministic handling for capabilities, preferences, digest and RSS source commands before using AI.
 - `digest`: daily digest orchestration and manual API endpoint.
-- `whatsapp`: Evolution API sender and webhook handling; inbound text messages are routed to `agent`.
-- `scheduler`: minute-level check that sends the daily digest once when the saved preferred time matches `America/Sao_Paulo`.
+- `whatsapp`: Evolution gateway, durable outbox/retries and webhook handling; inbound text is routed to `agent`.
+- `observability`: Micrometer counters for digest, watchlist and outbox outcomes.
+- `scheduler`: daily digest, watchlist scan and outbox retry schedules in `America/Sao_Paulo`.
 
 Tests live in `src/test/java/com/hermesnews`. Flyway migrations live in `src/main/resources/db/migration`. Postman artifacts live in `postman/` and local automation scripts live in `scripts/`.
 
@@ -43,6 +47,8 @@ Tests use JUnit 5, AssertJ, Mockito and Spring test slices. The `test` profile u
 
 Ranking v2 combines broad keywords, personal preferences, official source boosts, priority entities, launch keywords and recency. Keep regression coverage for official launch news like an OpenAI Sol/Terra/Luna announcement so important recent official news does not get buried by generic keyword-heavy posts.
 
+Persist ranking explanations on `digest_items`. Feedback commands resolve the visible number from the latest digest; formatter and Ollama prompt must preserve input order and numbering. Cluster same-event headlines before applying the digest limit, keeping the highest-ranked representative.
+
 ## Digest Message Format
 
 The WhatsApp digest must stay easy to scan: short `*Hermes News*` header, story count, only non-empty sections, numbered items, `Por que importa`, `Fonte`, and `Link`. Do not expose internal ranking scores in the delivered message. Keep the Ollama prompt and local fallback formatter aligned.
@@ -55,6 +61,10 @@ Use GitHub CodeQL, not SonarQube, for repository code scanning. Keep `.github/wo
 
 Keep `postman/hermes-news.postman_collection.json` and `postman/hermes-news.local.postman_environment.json` aligned with every public endpoint. Use Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` for webhook IDs, timestamps and smoke-test payloads. Secret-like environment values must use placeholders and `type: "secret"` where supported. Do not add scripts that install Newman or other npm tools automatically.
 
+Agent-command Postman requests may send real WhatsApp replies. Keep `agent_remote_jid` empty by default and skip those requests until the user explicitly supplies an authorized sender JID.
+
 ## Security & Configuration
 
 Never commit real API keys, WhatsApp tokens, phone numbers or `.env` files. Use `.env.example` for safe placeholders. Docker Compose runs Evolution API locally on host port `8081` with a local-only placeholder API key; `EVOLUTION_RECIPIENT` is the phone-number destination for scheduled/manual digests and replies, while `EVOLUTION_ALLOWED_SENDER` is the optional inbound allowlist for the WhatsApp agent. If Evolution emits inbound senders as `@lid`, use that exact JID in `EVOLUTION_ALLOWED_SENDER`, not in `EVOLUTION_RECIPIENT`. Deduplicate inbound `messages.upsert` events by `data.key.id` before calling the agent, because Evolution can deliver the same message more than once. Authorized inbound WhatsApp text sends a short processing ACK before calling the agent to reduce perceived latency while Ollama/tool calls run. RSS source commands must validate public `http`/`https` URLs and reject localhost/private-network targets before persistence; trailing chat punctuation such as `:` must be stripped before validation. `NewsSource.name` is the editable source label; source commands may resolve a source by public URL or exact case-insensitive label, for example `teste Akita` or `remova TechCrunch`. The RSS collector may fetch a public HTML page only to discover RSS/Atom links from `<link rel="alternate">` or RSS/Atom/feed anchors, and every discovered URL must pass the same public URL validation before being fetched. Source health is stored on `news_sources` and updated by scheduler/manual source tests with last success, last error, last error message and consecutive failures. Source management endpoints live under `/api/news-sources` and must stay aligned with the Postman collection. Keep RSS response buffering bounded with `RSS_MAX_RESPONSE_SIZE` (`2MB` default); increase it only for trusted large feeds/pages and make oversized responses skip the source instead of failing the scheduler. The local `evoapicloud/evolution-api:v2.1.1` `sendText` endpoint expects `number` plus flat `text`; verify the running container logs before changing this payload contract. Configure inbound message delivery with the per-instance webhook script after `hermes-local` exists; use `EVOLUTION_WEBHOOK_URL=http://app:8080/api/whatsapp/webhook` when the app runs in Compose, or `http://host.docker.internal:8080/api/whatsapp/webhook` when the app runs on the host and Evolution stays in Docker. Keep `EVOLUTION_SESSION_PHONE_VERSION` empty by default so Evolution can resolve a current Baileys version for QR generation. Local AI uses Ollama/qwen3 through Spring AI with `AI_SUMMARY_TIMEOUT`; keep prompts defensive because article content and WhatsApp messages are untrusted input.
+
+Outbox rows intentionally contain destination and message text; never log them. Retry only `FAILED` rows with a due `next_attempt_at`; `SKIPPED` means local configuration is incomplete and must not loop. Watchlist terms are private user data and urgent alerts must pass freshness, score, URL-deduplication and per-term cooldown checks.

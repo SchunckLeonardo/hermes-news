@@ -7,13 +7,17 @@ Personal technology news assistant built with Java 21 and Spring Boot. It collec
 This is a modular monolith under `com.hermesnews`:
 
 - `news`: RSS/Atom parser and collector, HTML feed discovery, Hacker News client, articles and managed RSS sources.
-- `ranking`: keyword-based scoring.
+- `ranking`: explainable scoring, persisted feedback signals and semantic event clustering.
+- `feedback`: positive/negative feedback linked to items from the latest digest.
 - `preferences`: persisted personal preferences for themes, sources, news count, preferred time and language.
+- `history`: bounded text search over previously delivered articles.
+- `watchlist`: urgent topic monitoring with freshness, score threshold, URL deduplication and cooldown.
 - `ai`: Spring AI abstraction for Ollama/qwen3 with timeout and local formatter fallback.
 - `agent`: WhatsApp conversational agent with deterministic handling for core commands before using AI.
 - `digest`: orchestration and `POST /api/digests/send-daily`.
-- `whatsapp`: Evolution API send client and `POST /api/whatsapp/webhook`; inbound text is sent to the agent.
-- `scheduler`: checks every minute and sends the daily digest once when the saved preferred time matches.
+- `whatsapp`: Evolution API gateway, durable outbox with retries and `POST /api/whatsapp/webhook`.
+- `observability`: Micrometer counters for collection, digest, watchlist and outbox attempts.
+- `scheduler`: daily digest check, urgent watchlist scan and outbox retry processing.
 
 Data is stored in PostgreSQL with Flyway migrations. Redis is available for caching/queueing and is also used by the local Evolution API container. Ollama runs locally through Docker Compose for low-cost LLM use.
 
@@ -83,6 +87,8 @@ Key variables are documented in `.env.example`:
 - `AI_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TEMPERATURE`, `AI_SUMMARY_TIMEOUT`
 - `RSS_FEEDS`, `RSS_MAX_RESPONSE_SIZE`, `HACKER_NEWS_BASE_URL`, `HACKER_NEWS_MAX_ITEMS`
 - `RANKING_KEYWORDS`, `RANKING_OFFICIAL_SOURCES`, `RANKING_PRIORITY_ENTITIES`, `RANKING_LAUNCH_KEYWORDS`
+- `WATCHLIST_SCAN_CRON`, `WATCHLIST_DEFAULT_COOLDOWN`, `WATCHLIST_MAX_ARTICLE_AGE`, `WATCHLIST_MIN_SCORE`
+- `OUTBOX_RETRY_CRON`, `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_BASE_DELAY`
 - `EVOLUTION_BASE_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`, `EVOLUTION_RECIPIENT`
 - `EVOLUTION_SERVER_URL`, `EVOLUTION_POSTGRES_DB`, `EVOLUTION_POSTGRES_USER`, `EVOLUTION_POSTGRES_PASSWORD`
 - `APP_DIGEST_CHECK_CRON`, `APP_SCHEDULER_ZONE`
@@ -97,7 +103,7 @@ The default RSS list includes the official OpenAI news feed:
 https://openai.com/news/rss.xml
 ```
 
-Ranking v2 still respects saved preferences, but now also boosts:
+Ranking evaluates saved preferences, feedback from earlier digests and these configured signals:
 
 - official source domains from `RANKING_OFFICIAL_SOURCES`, including OpenAI, Anthropic, Google DeepMind, AWS, Google Cloud, Azure, Spring, OpenJDK and Kubernetes defaults;
 - recent articles from the last 24 hours, 72 hours and 7 days;
@@ -105,6 +111,8 @@ Ranking v2 still respects saved preferences, but now also boosts:
 - launch signals from `RANKING_LAUNCH_KEYWORDS`, such as `announces`, `launch`, `release` and `preview`.
 
 This makes official launch news, for example an OpenAI announcement about Sol, Terra and Luna, rank above generic posts with many broad technology keywords.
+
+Every selected digest item stores its score explanation. Articles about the same event are clustered by normalized title entities and launch semantics before the digest limit is applied; the highest-ranked representative is kept. The displayed item order is preserved so commands such as `gostei da noticia 2` always refer to the visible item 2.
 
 ## Local AI with Ollama
 
@@ -182,7 +190,7 @@ docker compose logs -f app evolution-api
 
 ## Agent and Preferences
 
-The agent currently supports only these actions:
+The agent supports only these actions:
 
 - Generate and send the daily technology digest.
 - Answer direct questions about what the agent can do.
@@ -190,6 +198,10 @@ The agent currently supports only these actions:
 - Show saved preferences without calling the LLM.
 - Add, label, list, test, enable and disable public RSS source URLs.
 - Use saved themes, excluded themes, preferred sources, RSS sources, news count and preferred time in ranking/digest generation.
+- Record positive or negative feedback about an item from the latest digest and use similar feedback in future ranking.
+- Explain why an item was selected using the persisted ranking signals.
+- Add, remove and list urgent watchlist terms.
+- Search previously delivered articles from today, the current week or the last 30 days.
 
 RSS sources can be direct RSS/Atom URLs or public HTML pages that expose a feed with `<link rel="alternate">` or a visible RSS/Atom/feed anchor. URLs received from WhatsApp have common trailing punctuation removed before validation, so `https://example.com/blog/:` is stored as `https://example.com/blog/`. Discovered feed URLs still pass the public `http`/`https` validation before the app fetches them. `RSS_MAX_RESPONSE_SIZE` defaults to `2MB`; increase it only for trusted large feeds/pages. Source health is persisted with last success, last error, last error message and consecutive failure count.
 
@@ -232,9 +244,30 @@ teste Akita
 remova TechCrunch
 desative fonte https://example.com/feed
 me envie o digest
+gostei da noticia 2
+nao gostei da noticia 4
+por que a noticia 2 foi selecionada?
+monitore OpenAI
+o que voce esta monitorando?
+pare de monitorar OpenAI
+o que saiu sobre OpenAI esta semana?
+busque noticias sobre Java hoje
 ```
 
-The scheduler checks every minute by default and sends the digest once per day when the saved preferred time matches `APP_SCHEDULER_ZONE`.
+The scheduler checks every minute by default and sends the digest once per day when the saved preferred time matches `APP_SCHEDULER_ZONE`. The urgent watchlist scans every ten minutes by default, only considers recent articles above `WATCHLIST_MIN_SCORE`, and applies a six-hour cooldown per term.
+
+## Delivery Reliability and Metrics
+
+Every digest, agent reply, processing ACK and urgent alert is persisted in `whatsapp_outbox` before the Evolution API call. Failed messages retry with exponential backoff until `OUTBOX_MAX_ATTEMPTS`; missing local credentials produce `SKIPPED` and are not retried.
+
+Actuator exposes custom metrics after the corresponding flow runs:
+
+```text
+GET /actuator/metrics/hermes.digest.runs
+GET /actuator/metrics/hermes.news.collected
+GET /actuator/metrics/hermes.watchlist.alerts
+GET /actuator/metrics/hermes.whatsapp.outbox.attempts
+```
 
 ## Digest Format
 
@@ -262,7 +295,7 @@ Import these files into Postman:
 - `postman/hermes-news.postman_collection.json`
 - `postman/hermes-news.local.postman_environment.json`
 
-The collection includes health, manual digest, source management, webhook, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
+The collection includes health, metrics, manual digest, source management, webhook, conversational agent commands, Evolution root and Evolution send-text requests. It uses Postman dynamic variables such as `{{$guid}}`, `{{$timestamp}}`, `{{$isoTimestamp}}`, and `{{$randomInt}}` in pre-request scripts and sample payloads.
 
 The default webhook request uses `fromMe: true` so it only records the event and does not trigger an agent reply to a fake number. To test the conversational agent through Postman, set `fromMe` to `false` and use a real `remoteJid`.
 
@@ -287,6 +320,7 @@ The test profile uses H2 in PostgreSQL mode and runs Flyway migrations. External
 ## Next Steps
 
 - Add an optional hosted LLM adapter for deployment outside the local Ollama setup.
-- Use Redis for digest job locking or cache if the app grows.
+- Add retention rules for old webhook payloads, outbox messages and historical articles.
+- Add a small offline relevance dataset to compare ranking changes with Precision@K.
 - Add source health summaries to the daily digest when a preferred source keeps failing.
 - Add delayed ACK instead of always sending the WhatsApp processing message.

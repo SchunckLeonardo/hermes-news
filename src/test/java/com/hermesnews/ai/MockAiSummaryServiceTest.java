@@ -92,6 +92,8 @@ class MockAiSummaryServiceTest {
 
 		assertThat(digest).contains("*IA*", "*Java*");
 		assertThat(digest).doesNotContain("*Backend*").doesNotContain("*Cloud*");
+		assertThat(digest.indexOf("1. *Java backend performance*"))
+				.isLessThan(digest.indexOf("2. *AI infrastructure*"));
 		assertThat(digest.indexOf("https://example.com/java"))
 				.isEqualTo(digest.lastIndexOf("https://example.com/java"));
 	}

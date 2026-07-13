@@ -93,6 +93,20 @@ class FeedbackServiceTest {
 		assertThat(adjustment.reason()).contains("Feedback positivo");
 	}
 
+	@Test
+	void replacesExistingFeedbackWhenTheUserChangesTheirMind() {
+		var existing = new ArticleFeedback(article, FeedbackType.POSITIVE);
+		when(digestRepository.findFirstByOrderByGeneratedAtDesc()).thenReturn(Optional.of(digest));
+		when(digestItemRepository.findByDigestAndRankOrder(digest, 2)).thenReturn(Optional.of(digestItem));
+		when(feedbackRepository.findByArticle(article)).thenReturn(Optional.of(existing));
+		when(feedbackRepository.save(existing)).thenReturn(existing);
+
+		service.recordLatest(2, FeedbackType.NEGATIVE);
+
+		assertThat(existing.getType()).isEqualTo(FeedbackType.NEGATIVE);
+		verify(feedbackRepository).save(existing);
+	}
+
 	private static CollectedArticle article(String title, String url) {
 		return new CollectedArticle(
 				"OpenAI",

@@ -3,6 +3,7 @@ package com.hermesnews.agent;
 import com.hermesnews.digest.DailyDigestService;
 import com.hermesnews.feedback.FeedbackService;
 import com.hermesnews.feedback.FeedbackType;
+import com.hermesnews.history.NewsHistoryService;
 import com.hermesnews.news.NewsSourceResponse;
 import com.hermesnews.news.NewsSourceService;
 import com.hermesnews.news.NewsSourceTestResponse;
@@ -11,6 +12,9 @@ import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.preferences.PreferenceUpdateRequest;
 import com.hermesnews.watchlist.WatchlistService;
 import java.time.LocalTime;
+import java.time.Duration;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +36,7 @@ public class AgentService {
 			- registrar feedback positivo ou negativo sobre itens do ultimo digest;
 			- explicar os sinais que fizeram uma noticia entrar no ranking;
 			- monitorar termos e enviar alertas urgentes com cooldown;
+			- buscar noticias ja entregues por tema em periodos recentes;
 			- listar, testar, ativar, desativar e cadastrar fontes RSS publicas.
 			""".trim();
 
@@ -42,6 +47,7 @@ public class AgentService {
 	private final RssNewsCollector rssNewsCollector;
 	private final FeedbackService feedbackService;
 	private final WatchlistService watchlistService;
+	private final NewsHistoryService newsHistoryService;
 
 	public AgentService(
 			AgentInterpreter interpreter,
@@ -50,7 +56,8 @@ public class AgentService {
 			NewsSourceService newsSourceService,
 			RssNewsCollector rssNewsCollector,
 			FeedbackService feedbackService,
-			WatchlistService watchlistService) {
+			WatchlistService watchlistService,
+			NewsHistoryService newsHistoryService) {
 		this.interpreter = interpreter;
 		this.dailyDigestService = dailyDigestService;
 		this.preferenceService = preferenceService;
@@ -58,6 +65,7 @@ public class AgentService {
 		this.rssNewsCollector = rssNewsCollector;
 		this.feedbackService = feedbackService;
 		this.watchlistService = watchlistService;
+		this.newsHistoryService = newsHistoryService;
 	}
 
 	public String handleIncomingText(String message) {
@@ -77,6 +85,10 @@ public class AgentService {
 		var feedbackResponse = handleFeedbackOrExplanation(normalizedMessage);
 		if (hasText(feedbackResponse)) {
 			return feedbackResponse;
+		}
+		var historyResponse = handleHistorySearch(normalizedMessage);
+		if (hasText(historyResponse)) {
+			return historyResponse;
 		}
 		var watchlistResponse = handleWatchlistCommand(normalizedMessage);
 		if (hasText(watchlistResponse)) {
@@ -105,6 +117,58 @@ public class AgentService {
 			return CAPABILITIES_MESSAGE;
 		}
 		return hasText(decision.response()) ? decision.response().trim() : "Como posso ajudar com suas noticias de tecnologia?";
+	}
+
+	private String handleHistorySearch(String message) {
+		var normalized = normalize(message);
+		if (!containsAny(normalized,
+				"o que saiu sobre ",
+				"busque noticias sobre ",
+				"buscar noticias sobre ",
+				"procure noticias sobre ",
+				"historico de ")) {
+			return "";
+		}
+		var marker = List.of(
+				"o que saiu sobre ",
+				"busque noticias sobre ",
+				"buscar noticias sobre ",
+				"procure noticias sobre ",
+				"historico de ").stream()
+				.filter(normalized::contains)
+				.findFirst()
+				.orElse("");
+		var start = normalized.indexOf(marker) + marker.length();
+		var query = message.substring(start)
+				.replaceAll("[?!.;:]+$", "")
+				.replaceAll("(?i)\\s+(esta semana|hoje|no ultimo mes|nos ultimos 30 dias)$", "")
+				.trim();
+		var period = normalized.contains("hoje")
+				? Duration.ofDays(1)
+				: containsAny(normalized, "ultimo mes", "ultimos 30 dias") ? Duration.ofDays(30) : Duration.ofDays(7);
+		try {
+			var result = newsHistoryService.search(query, period, 5);
+			if (result.articles().isEmpty()) {
+				return "Nao encontrei noticias recentes sobre " + result.query() + ".";
+			}
+			var lines = new ArrayList<String>();
+			lines.add("*Historico: " + result.query() + "*");
+			var formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.of("America/Sao_Paulo"));
+			for (int index = 0; index < result.articles().size(); index++) {
+				var article = result.articles().get(index);
+				var date = article.getPublishedAt() == null ? "data desconhecida" : formatter.format(article.getPublishedAt());
+				lines.add("%d. *%s*\nData: %s\nFonte: %s\nLink: %s".formatted(
+						index + 1,
+						article.getTitle(),
+						date,
+						article.getSourceName(),
+						article.getUrl()));
+			}
+			return String.join("\n\n", lines);
+		}
+		catch (IllegalArgumentException exception) {
+			return "Informe um tema valido para pesquisar no historico.";
+		}
 	}
 
 	private String handleWatchlistCommand(String message) {

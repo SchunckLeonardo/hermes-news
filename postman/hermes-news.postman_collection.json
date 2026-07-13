@@ -75,6 +75,31 @@
           ]
         },
         {
+          "name": "Digest Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/actuator/metrics/hermes.digest.runs",
+              "host": ["{{base_url}}"],
+              "path": ["actuator", "metrics", "hermes.digest.runs"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test('digest metric is exposed', function () { pm.expect(body.name).to.eql('hermes.digest.runs'); pm.expect(body.measurements).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "List News Sources",
           "request": {
             "method": "GET",
@@ -301,6 +326,106 @@
                   "pm.test('webhook accepted', function () { pm.expect(pm.response.json().status).to.eql('accepted'); });"
                 ]
               }
+            }
+          ]
+        },
+        {
+          "name": "WhatsApp Agent Commands (Real Reply)",
+          "description": "These webhook requests call the conversational agent and may send a real WhatsApp reply. Set agent_remote_jid to the authorized sender JID before running them.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('agent_remote_jid')) {",
+                  "  console.warn('Set agent_remote_jid before running conversational agent requests.');",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "item": [
+            {
+              "name": "Explain Digest Item",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"{{agent_remote_jid}}\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"por que a noticia {{digest_item_number}} foi selecionada?\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/whatsapp/webhook",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "whatsapp", "webhook"]
+                }
+              },
+              "event": [{
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('webhook accepted', function () { pm.response.to.have.status(202); });"] }
+              }]
+            },
+            {
+              "name": "Positive Digest Feedback",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"{{agent_remote_jid}}\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"gostei da noticia {{digest_item_number}}\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/whatsapp/webhook",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "whatsapp", "webhook"]
+                }
+              },
+              "event": [{
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('webhook accepted', function () { pm.response.to.have.status(202); });"] }
+              }]
+            },
+            {
+              "name": "Add Urgent Watch",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"{{agent_remote_jid}}\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"monitore {{watchlist_term}}\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/whatsapp/webhook",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "whatsapp", "webhook"]
+                }
+              },
+              "event": [{
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('webhook accepted', function () { pm.response.to.have.status(202); });"] }
+              }]
+            },
+            {
+              "name": "Search Weekly History",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{evolution_instance}}\",\n  \"data\": {\n    \"key\": {\n      \"id\": \"{{$guid}}\",\n      \"remoteJid\": \"{{agent_remote_jid}}\",\n      \"fromMe\": false\n    },\n    \"message\": {\n      \"conversation\": \"o que saiu sobre {{history_query}} esta semana?\"\n    }\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/whatsapp/webhook",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "whatsapp", "webhook"]
+                }
+              },
+              "event": [{
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('webhook accepted', function () { pm.response.to.have.status(202); });"] }
+              }]
             }
           ]
         }

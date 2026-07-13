@@ -5,6 +5,7 @@ import com.hermesnews.news.Article;
 import com.hermesnews.news.ArticleRepository;
 import com.hermesnews.news.CollectedArticle;
 import com.hermesnews.news.NewsCollector;
+import com.hermesnews.observability.HermesMetrics;
 import com.hermesnews.preferences.PreferenceService;
 import com.hermesnews.ranking.RankedArticle;
 import com.hermesnews.ranking.SemanticEventClusterer;
@@ -33,6 +34,7 @@ public class DailyDigestService {
 	private final WhatsAppService whatsAppService;
 	private final PreferenceService preferenceService;
 	private final SemanticEventClusterer eventClusterer;
+	private final HermesMetrics metrics;
 
 	@Autowired
 	public DailyDigestService(
@@ -44,7 +46,8 @@ public class DailyDigestService {
 			AiSummaryService aiSummaryService,
 			WhatsAppService whatsAppService,
 			PreferenceService preferenceService,
-			SemanticEventClusterer eventClusterer) {
+			SemanticEventClusterer eventClusterer,
+			HermesMetrics metrics) {
 		this.collectors = collectors;
 		this.articleRepository = articleRepository;
 		this.digestRepository = digestRepository;
@@ -54,6 +57,7 @@ public class DailyDigestService {
 		this.whatsAppService = whatsAppService;
 		this.preferenceService = preferenceService;
 		this.eventClusterer = eventClusterer;
+		this.metrics = metrics;
 	}
 
 	public DailyDigestService(
@@ -74,7 +78,8 @@ public class DailyDigestService {
 				aiSummaryService,
 				whatsAppService,
 				preferenceService,
-				new SemanticEventClusterer());
+				new SemanticEventClusterer(),
+				HermesMetrics.noop());
 	}
 
 	@Transactional
@@ -107,6 +112,7 @@ public class DailyDigestService {
 		var sendResult = whatsAppService.sendText(message);
 		digest.applySendStatus(sendResult.status());
 		digestRepository.save(digest);
+		metrics.recordDigest(collected.size(), savedArticles.size(), sendResult.status());
 		return new DailyDigestResult(savedArticles.size(), message, sendResult.status());
 	}
 

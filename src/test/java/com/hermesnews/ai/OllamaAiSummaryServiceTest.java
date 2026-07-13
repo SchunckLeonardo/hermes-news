@@ -27,10 +27,11 @@ class OllamaAiSummaryServiceTest {
 		assertThat(summary).isEqualTo("Resumo qwen3");
 		assertThat(client.systemPrompt).contains("Hermes News");
 		assertThat(client.systemPrompt)
-				.contains("*Hermes News*")
-				.contains("Por que importa:")
-				.contains("mostre apenas secoes com noticias")
-				.contains("Nao mostre score tecnico");
+					.contains("*Hermes News*")
+					.contains("Por que importa:")
+					.contains("mostre apenas secoes com noticias")
+					.contains("preserve exatamente a ordem e a numeracao")
+					.contains("Nao mostre score tecnico");
 		assertThat(client.userPrompt)
 				.contains("Preferencias do usuario")
 				.contains("ai, java, backend, cloud")

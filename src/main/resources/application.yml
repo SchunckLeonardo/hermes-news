@@ -27,7 +27,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
 
 app:
   ai:
@@ -53,6 +53,10 @@ app:
     max-article-age: ${WATCHLIST_MAX_ARTICLE_AGE:24h}
     min-score: ${WATCHLIST_MIN_SCORE:20}
     max-alerts-per-run: ${WATCHLIST_MAX_ALERTS_PER_RUN:2}
+  outbox:
+    retry-cron: ${OUTBOX_RETRY_CRON:0 * * * * *}
+    max-attempts: ${OUTBOX_MAX_ATTEMPTS:3}
+    base-delay: ${OUTBOX_BASE_DELAY:1m}
   evolution:
     base-url: ${EVOLUTION_BASE_URL:}
     api-key: ${EVOLUTION_API_KEY:}

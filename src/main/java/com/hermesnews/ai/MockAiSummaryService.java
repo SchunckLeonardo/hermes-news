@@ -1,7 +1,6 @@
 package com.hermesnews.ai;
 
 import com.hermesnews.ranking.RankedArticle;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -26,51 +25,50 @@ public class MockAiSummaryService implements AiSummaryService {
 					Nenhuma noticia nova relevante foi coletada hoje.
 					""".trim();
 		}
-		var grouped = groupedByTheme(articles);
-		var total = grouped.values().stream().mapToInt(List::size).sum();
+		var selected = deduplicatePreservingOrder(articles);
+		var total = selected.size();
 		var builder = new StringBuilder("*Hermes News*\nDigest de tecnologia\n\n")
 				.append(total == 1 ? "1 noticia nova selecionada." : total + " noticias novas selecionadas.")
 				.append("\n\n");
-		var itemNumber = 1;
-		for (var entry : grouped.entrySet()) {
-			if (entry.getValue().isEmpty()) {
-				continue;
+		var currentTheme = "";
+		for (int index = 0; index < selected.size(); index++) {
+			var ranked = selected.get(index);
+			var theme = themeFor(ranked);
+			if (!theme.equals(currentTheme)) {
+				if (!currentTheme.isBlank()) {
+					builder.append("\n");
+				}
+				builder.append("*").append(theme).append("*\n");
+				currentTheme = theme;
 			}
-			builder.append("*").append(entry.getKey()).append("*\n");
-			for (RankedArticle ranked : entry.getValue()) {
-				var article = ranked.article();
-				builder.append(itemNumber++)
-						.append(". *")
-						.append(cleanTitle(article.title()))
-						.append("*\n")
-						.append("Por que importa: ")
-						.append(reason(article.summary()))
-						.append("\n")
-						.append("Fonte: ")
-						.append(sourceName(article.sourceName()))
-						.append("\n")
-						.append("Link: ")
-						.append(cleanLine(article.url(), Integer.MAX_VALUE))
-						.append("\n");
-			}
-			builder.append("\n");
+			var article = ranked.article();
+			builder.append(index + 1)
+					.append(". *")
+					.append(cleanTitle(article.title()))
+					.append("*\n")
+					.append("Por que importa: ")
+					.append(reason(article.summary()))
+					.append("\n")
+					.append("Fonte: ")
+					.append(sourceName(article.sourceName()))
+					.append("\n")
+					.append("Link: ")
+					.append(cleanLine(article.url(), Integer.MAX_VALUE))
+					.append("\n");
 		}
 		return builder.toString().trim();
 	}
 
-	private static LinkedHashMap<String, List<RankedArticle>> groupedByTheme(List<RankedArticle> articles) {
-		var grouped = new LinkedHashMap<String, List<RankedArticle>>();
-		for (String theme : List.of("IA", "Java", "Backend", "Cloud", "Outras")) {
-			grouped.put(theme, new java.util.ArrayList<>());
-		}
+	private static List<RankedArticle> deduplicatePreservingOrder(List<RankedArticle> articles) {
+		var selected = new java.util.ArrayList<RankedArticle>();
 		var seenUrls = new LinkedHashSet<String>();
 		for (RankedArticle ranked : articles.stream().limit(MAX_ITEMS).toList()) {
 			if (!seenUrls.add(ranked.article().url())) {
 				continue;
 			}
-			grouped.get(themeFor(ranked)).add(ranked);
+			selected.add(ranked);
 		}
-		return grouped;
+		return List.copyOf(selected);
 	}
 
 	private static String themeFor(RankedArticle ranked) {

@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
-public class EvolutionWhatsAppService implements WhatsAppService {
+public class EvolutionWhatsAppService implements WhatsAppGateway {
 
 	private static final Logger log = LoggerFactory.getLogger(EvolutionWhatsAppService.class);
 
